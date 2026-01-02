@@ -29,3 +29,6 @@ chroma_db/
 # Logs
 *.log
 logs/
+
+# Private documentation
+docs/
