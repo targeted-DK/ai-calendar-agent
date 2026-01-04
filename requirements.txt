@@ -21,6 +21,3 @@ pytest-asyncio>=0.21.0
 
 # Optional: Garmin integration (uses mock data if not installed)
 # garminconnect>=0.1.0
-
-# Optional: Strava integration (uses mock data if not installed)
-# stravalib>=1.6.0

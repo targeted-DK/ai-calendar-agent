@@ -11,7 +11,7 @@
 CREATE TABLE IF NOT EXISTS health_metrics (
     id SERIAL PRIMARY KEY,
     timestamp TIMESTAMP NOT NULL,
-    source VARCHAR(50) NOT NULL,  -- 'garmin', 'strava', etc.
+    source VARCHAR(50) NOT NULL,  -- 'garmin', 'manual', etc.
 
     -- Sleep metrics
     sleep_duration_hours DECIMAL(4,2),
