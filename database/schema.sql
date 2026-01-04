@@ -2,7 +2,8 @@
 -- PostgreSQL 12+
 
 -- Extension for vector support (for RAG/embeddings later)
-CREATE EXTENSION IF NOT EXISTS vector;
+-- TODO: Install pgvector extension when implementing RAG
+-- CREATE EXTENSION IF NOT EXISTS vector;
 
 -- ============================================
 -- Health Metrics Table

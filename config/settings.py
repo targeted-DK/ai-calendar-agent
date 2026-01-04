@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     ollama_model: str = "llama2"
     ollama_base_url: str = "http://localhost:11434"
 
+    # Database
+    database_url: str = ""
+
     # Google Calendar
     google_calendar_credentials_path: str = "credentials.json"
     google_calendar_token_path: str = "token.json"
