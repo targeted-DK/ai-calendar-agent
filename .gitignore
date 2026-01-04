@@ -33,3 +33,23 @@ logs/
 
 # Private documentation
 docs/
+
+# Internal documentation (only README.md should be public)
+*_HANDOFF.md
+*_GUIDE.md
+*_STATUS.md
+*_FAQ.md
+QUICKSTART*.md
+BUILD_STATUS.md
+CONTEXT*.md
+MENTAL_MODEL.md
+database/README.md
+
+# Test and debug outputs
+bug_log.json
+bug_report.md
+test_output*.txt
+
+# Temporary files
+*.tmp
+.cache/
