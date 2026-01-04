@@ -3,6 +3,7 @@ import json
 from abc import ABC, abstractmethod
 import anthropic
 import openai
+import requests
 from config import settings
 
 
@@ -117,6 +118,60 @@ class OpenAIClient(BaseLLMClient):
         }
 
 
+class OllamaClient(BaseLLMClient):
+    """Ollama local LLM client."""
+
+    def __init__(self):
+        self.base_url = settings.ollama_base_url
+        self.model = settings.ollama_model
+
+    def create_message(
+        self,
+        messages: List[Dict],
+        tools: Optional[List[Dict]] = None,
+        max_tokens: int = 4096
+    ) -> Dict:
+        """Create a message with Ollama."""
+        # Ollama uses a simpler chat API
+        # Convert messages to Ollama format
+        ollama_messages = []
+        for msg in messages:
+            role = msg.get("role")
+            content = msg.get("content")
+
+            # Handle text content
+            if isinstance(content, str):
+                ollama_messages.append({"role": role, "content": content})
+            elif isinstance(content, list):
+                # Extract text from content blocks
+                text_parts = [block.get("text", "") for block in content if block.get("type") == "text"]
+                ollama_messages.append({"role": role, "content": " ".join(text_parts)})
+
+        response = requests.post(
+            f"{self.base_url}/api/chat",
+            json={
+                "model": self.model,
+                "messages": ollama_messages,
+                "stream": False
+            }
+        )
+
+        if response.status_code != 200:
+            raise Exception(f"Ollama API error: {response.status_code} - {response.text}")
+
+        result = response.json()
+        message_content = result.get("message", {}).get("content", "")
+
+        return {
+            "content": [{"type": "text", "text": message_content}],
+            "stop_reason": "end_turn",
+            "usage": {
+                "input_tokens": 0,  # Ollama doesn't provide token counts
+                "output_tokens": 0
+            }
+        }
+
+
 class BaseAgent:
     """
     Base agent class with tool calling capabilities.
@@ -145,6 +200,8 @@ class BaseAgent:
             return AnthropicClient()
         elif settings.llm_provider == "openai":
             return OpenAIClient()
+        elif settings.llm_provider == "ollama":
+            return OllamaClient()
         else:
             raise ValueError(f"Unsupported LLM provider: {settings.llm_provider}")
 
