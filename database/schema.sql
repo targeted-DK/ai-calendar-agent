@@ -57,6 +57,7 @@ CREATE INDEX idx_health_created ON health_metrics(created_at DESC);
 -- ============================================
 CREATE TABLE IF NOT EXISTS activity_data (
     id SERIAL PRIMARY KEY,
+    external_id VARCHAR(255),  -- Garmin activity ID
     timestamp TIMESTAMP NOT NULL,
     source VARCHAR(50) NOT NULL,
 
@@ -68,15 +69,30 @@ CREATE TABLE IF NOT EXISTS activity_data (
     avg_heart_rate INTEGER,
     max_heart_rate INTEGER,
     avg_power INTEGER,
+    avg_pace DECIMAL(5,2),  -- min/km
+    avg_cadence INTEGER,  -- steps/min or RPM
 
     training_load INTEGER,
     perceived_exertion INTEGER CHECK (perceived_exertion >= 1 AND perceived_exertion <= 10),
 
+    -- Garmin Training Metrics
+    aerobic_training_effect DECIMAL(3,1),  -- 0.0-5.0
+    anaerobic_training_effect DECIMAL(3,1),  -- 0.0-5.0
+    training_status VARCHAR(50),  -- 'productive', 'maintaining', 'detraining', 'recovery', 'unproductive'
+    vo2_max DECIMAL(4,1),  -- ml/kg/min
+    lactate_threshold_hr INTEGER,  -- bpm
+    recommended_recovery_time INTEGER,  -- hours
+
     calories_burned INTEGER,
+
+    -- FIT file storage (optional)
+    fit_file_path VARCHAR(500),
 
     -- Metadata
     raw_data JSONB,
-    created_at TIMESTAMP DEFAULT NOW()
+    created_at TIMESTAMP DEFAULT NOW(),
+
+    CONSTRAINT unique_activity UNIQUE (source, external_id)
 );
 
 CREATE INDEX idx_activity_timestamp ON activity_data(timestamp DESC);

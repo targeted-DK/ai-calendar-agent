@@ -241,7 +241,190 @@ class GarminConnector:
 
         return round(recovery_score, 2)
 
+    def get_activities(self, start_date: Optional[date] = None, limit: int = 20) -> List[Dict[str, Any]]:
+        """
+        Get list of recent activities from Garmin.
+
+        Args:
+            start_date: Start date to fetch from (defaults to 30 days ago)
+            limit: Maximum number of activities to return
+
+        Returns:
+            List of activity dictionaries
+        """
+        if not self._authenticated:
+            return self._mock_activities(start_date, limit)
+
+        try:
+            if start_date is None:
+                start_date = date.today() - timedelta(days=30)
+
+            activities = self.client.get_activities_by_date(
+                start_date.isoformat(),
+                date.today().isoformat(),
+                activitytype=None
+            )
+
+            # Parse and format activities
+            formatted_activities = []
+            for activity in list(activities)[:limit]:
+                formatted = {
+                    'external_id': str(activity.get('activityId')),
+                    'timestamp': activity.get('startTimeLocal'),
+                    'activity_type': activity.get('activityType', {}).get('typeKey', 'unknown'),
+                    'duration_minutes': activity.get('duration', 0) / 60,
+                    'distance_km': (activity.get('distance', 0) / 1000) if activity.get('distance') else 0,
+                    'elevation_gain_m': activity.get('elevationGain'),
+                    'avg_heart_rate': activity.get('averageHR'),
+                    'max_heart_rate': activity.get('maxHR'),
+                    'avg_power': activity.get('avgPower'),
+                    'calories_burned': activity.get('calories'),
+                    'aerobic_training_effect': activity.get('aerobicTrainingEffect'),
+                    'anaerobic_training_effect': activity.get('anaerobicTrainingEffect'),
+                    'raw_data': activity
+                }
+                formatted_activities.append(formatted)
+
+            return formatted_activities
+
+        except Exception as e:
+            print(f"❌ Error fetching Garmin activities: {e}")
+            return self._mock_activities(start_date, limit)
+
+    def get_activity_details(self, activity_id: str) -> Dict[str, Any]:
+        """
+        Get detailed data for a specific activity.
+
+        Args:
+            activity_id: Garmin activity ID
+
+        Returns:
+            Dictionary with detailed activity metrics
+        """
+        if not self._authenticated:
+            return self._mock_activity_details(activity_id)
+
+        try:
+            activity = self.client.get_activity(activity_id)
+
+            return {
+                'external_id': str(activity_id),
+                'timestamp': activity.get('startTimeLocal'),
+                'activity_type': activity.get('activityType', {}).get('typeKey'),
+                'duration_minutes': activity.get('duration', 0) / 60,
+                'distance_km': (activity.get('distance', 0) / 1000) if activity.get('distance') else 0,
+                'elevation_gain_m': activity.get('elevationGain'),
+                'avg_heart_rate': activity.get('averageHR'),
+                'max_heart_rate': activity.get('maxHR'),
+                'avg_power': activity.get('avgPower'),
+                'avg_pace': activity.get('avgSpeed'),  # m/s
+                'avg_cadence': activity.get('avgRunCadence') or activity.get('avgBikeCadence'),
+                'calories_burned': activity.get('calories'),
+                'aerobic_training_effect': activity.get('aerobicTrainingEffect'),
+                'anaerobic_training_effect': activity.get('anaerobicTrainingEffect'),
+                'training_load': activity.get('trainingEffectLabel'),
+                'vo2_max': activity.get('vO2MaxValue'),
+                'lactate_threshold_hr': activity.get('lactateThresholdHeartRate'),
+                'raw_data': activity
+            }
+
+        except Exception as e:
+            print(f"❌ Error fetching Garmin activity details: {e}")
+            return self._mock_activity_details(activity_id)
+
+    def get_training_status(self) -> Dict[str, Any]:
+        """
+        Get overall training status from Garmin.
+
+        Returns:
+            Dictionary with training status, VO2 max, etc.
+        """
+        if not self._authenticated:
+            return self._mock_training_status()
+
+        try:
+            # Note: Specific API call depends on garminconnect library version
+            # This is a placeholder - actual implementation may vary
+            training_status = {
+                'training_status': 'maintaining',  # productive, maintaining, detraining, recovery
+                'vo2_max_running': None,
+                'vo2_max_cycling': None,
+                'lactate_threshold': None,
+                'fitness_age': None
+            }
+
+            return training_status
+
+        except Exception as e:
+            print(f"❌ Error fetching Garmin training status: {e}")
+            return self._mock_training_status()
+
     # Mock data methods for testing without Garmin credentials
+
+    def _mock_activities(self, start_date: Optional[date], limit: int) -> List[Dict[str, Any]]:
+        """Generate mock activities for testing."""
+        import random
+        from datetime import datetime
+
+        activities = []
+        for i in range(min(limit, 10)):
+            activity_date = (start_date or (date.today() - timedelta(days=30))) + timedelta(days=i*3)
+            activity_type = random.choice(['running', 'cycling', 'swimming', 'strength_training'])
+
+            activities.append({
+                'external_id': f'mock_{i}_{activity_date.isoformat()}',
+                'timestamp': datetime.combine(activity_date, datetime.min.time()).isoformat(),
+                'activity_type': activity_type,
+                'duration_minutes': random.randint(30, 90),
+                'distance_km': round(random.uniform(5, 20), 2) if activity_type in ['running', 'cycling'] else 0,
+                'elevation_gain_m': random.randint(50, 500) if activity_type in ['running', 'cycling'] else 0,
+                'avg_heart_rate': random.randint(130, 170),
+                'max_heart_rate': random.randint(170, 190),
+                'avg_power': random.randint(150, 250) if activity_type == 'cycling' else None,
+                'calories_burned': random.randint(300, 800),
+                'aerobic_training_effect': round(random.uniform(2.0, 4.5), 1),
+                'anaerobic_training_effect': round(random.uniform(0.5, 3.0), 1),
+                'source': 'mock'
+            })
+
+        return activities
+
+    def _mock_activity_details(self, activity_id: str) -> Dict[str, Any]:
+        """Generate mock activity details."""
+        import random
+        from datetime import datetime
+
+        return {
+            'external_id': activity_id,
+            'timestamp': datetime.now().isoformat(),
+            'activity_type': 'running',
+            'duration_minutes': random.randint(30, 90),
+            'distance_km': round(random.uniform(5, 15), 2),
+            'elevation_gain_m': random.randint(50, 300),
+            'avg_heart_rate': random.randint(140, 165),
+            'max_heart_rate': random.randint(175, 190),
+            'avg_pace': round(random.uniform(4.5, 6.5), 2),
+            'avg_cadence': random.randint(160, 180),
+            'calories_burned': random.randint(400, 700),
+            'aerobic_training_effect': round(random.uniform(2.5, 4.0), 1),
+            'anaerobic_training_effect': round(random.uniform(1.0, 2.5), 1),
+            'vo2_max': round(random.uniform(45, 60), 1),
+            'lactate_threshold_hr': random.randint(155, 175),
+            'source': 'mock'
+        }
+
+    def _mock_training_status(self) -> Dict[str, Any]:
+        """Generate mock training status."""
+        import random
+
+        return {
+            'training_status': random.choice(['productive', 'maintaining', 'recovery']),
+            'vo2_max_running': round(random.uniform(45, 60), 1),
+            'vo2_max_cycling': round(random.uniform(50, 65), 1),
+            'lactate_threshold': random.randint(155, 175),
+            'fitness_age': random.randint(25, 45),
+            'source': 'mock'
+        }
 
     def _mock_sleep_data(self, target_date: Optional[date] = None) -> Dict[str, Any]:
         """Generate mock sleep data for testing"""
