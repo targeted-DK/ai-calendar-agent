@@ -53,3 +53,7 @@ test_output*.txt
 # Temporary files
 *.tmp
 .cache/
+
+# Google Calendar credentials (sensitive)
+client_secret*.json
+*Zone.Identifier
