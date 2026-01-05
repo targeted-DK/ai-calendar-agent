@@ -175,6 +175,24 @@ def get_calendar_context(calendar: GoogleCalendarClient, days: int = 7) -> Dict:
     }
 
 
+def count_scheduled_workouts(existing_workouts: List[Dict]) -> Dict:
+    """Count scheduled workouts by type from calendar events."""
+    counts = {'runs': 0, 'bike': 0, 'swim': 0, 'strength': 0}
+
+    for w in existing_workouts:
+        title = w.get('title', '').lower()
+        if any(x in title for x in ['run', 'running', 'jog']):
+            counts['runs'] += 1
+        elif any(x in title for x in ['bike', 'cycling', 'cycle', 'ride']):
+            counts['bike'] += 1
+        elif any(x in title for x in ['swim', 'pool']):
+            counts['swim'] += 1
+        elif any(x in title for x in ['strength', 'lift', 'weight', 'gym', 'squat', 'deadlift', 'bench']):
+            counts['strength'] += 1
+
+    return counts
+
+
 def get_week_progress(recent_workouts: List[Dict], goals: Dict) -> Dict:
     """Calculate this week's training progress vs targets."""
     # Get this week's workouts
