@@ -5,6 +5,11 @@ Uses the unofficial garminconnect library
 from datetime import datetime, date, timedelta
 from typing import Dict, List, Optional, Any
 import json
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 
 class GarminConnector:
@@ -20,17 +25,21 @@ class GarminConnector:
         Initialize Garmin connector.
 
         Args:
-            email: Garmin Connect email
-            password: Garmin Connect password
+            email: Garmin Connect email (defaults to GARMIN_EMAIL env var)
+            password: Garmin Connect password (defaults to GARMIN_PASSWORD env var)
         """
-        self.email = email
-        self.password = password
+        # Check environment variables if not provided
+        self.email = email or os.getenv('GARMIN_EMAIL')
+        self.password = password or os.getenv('GARMIN_PASSWORD')
         self.client = None
         self._authenticated = False
 
-        # Will implement actual connection when credentials are provided
-        if email and password:
+        # Connect if credentials are available
+        if self.email and self.password:
             self._connect()
+        else:
+            print("ℹ️  No Garmin credentials found - using mock data")
+            print("   To connect: Add GARMIN_EMAIL and GARMIN_PASSWORD to .env")
 
     def _connect(self):
         """Connect to Garmin Connect"""
