@@ -78,18 +78,21 @@ class GarminConnector:
 
             sleep_data = self.client.get_sleep_data(target_date.isoformat())
 
-            # Parse Garmin sleep data
-            daily_sleep = sleep_data.get('dailySleepDTO', {})
-            sleep_movement = sleep_data.get('sleepMovement', [])
+            # Parse Garmin sleep data with null safety
+            daily_sleep = sleep_data.get('dailySleepDTO', {}) if isinstance(sleep_data, dict) else {}
+
+            # Helper to safely convert seconds to hours/minutes
+            def safe_divide(value, divisor):
+                return value / divisor if value is not None else None
 
             return {
                 'date': target_date.isoformat(),
-                'sleep_duration_hours': daily_sleep.get('sleepTimeSeconds', 0) / 3600,
-                'sleep_quality_score': daily_sleep.get('sleepQualityTypePK', 0),
-                'deep_sleep_minutes': daily_sleep.get('deepSleepSeconds', 0) / 60,
-                'light_sleep_minutes': daily_sleep.get('lightSleepSeconds', 0) / 60,
-                'rem_sleep_minutes': daily_sleep.get('remSleepSeconds', 0) / 60,
-                'awake_time_minutes': daily_sleep.get('awakeSleepSeconds', 0) / 60,
+                'sleep_duration_hours': safe_divide(daily_sleep.get('sleepTimeSeconds'), 3600),
+                'sleep_quality_score': daily_sleep.get('sleepQualityTypePK'),
+                'deep_sleep_minutes': safe_divide(daily_sleep.get('deepSleepSeconds'), 60),
+                'light_sleep_minutes': safe_divide(daily_sleep.get('lightSleepSeconds'), 60),
+                'rem_sleep_minutes': safe_divide(daily_sleep.get('remSleepSeconds'), 60),
+                'awake_time_minutes': safe_divide(daily_sleep.get('awakeSleepSeconds'), 60),
                 'sleep_start_time': daily_sleep.get('sleepStartTimestampLocal'),
                 'sleep_end_time': daily_sleep.get('sleepEndTimestampLocal'),
                 'raw_data': sleep_data
@@ -155,18 +158,35 @@ class GarminConnector:
 
             stress = self.client.get_stress_data(target_date.isoformat())
 
+            # Handle different stress data formats
+            if isinstance(stress, str) or stress is None or not stress:
+                # No stress data available or invalid format
+                return {
+                    'date': target_date.isoformat(),
+                    'avg_stress_level': None,
+                    'max_stress_level': None,
+                    'rest_stress_duration': None,
+                    'low_stress_duration': None,
+                    'medium_stress_duration': None,
+                    'high_stress_duration': None,
+                    'raw_data': stress
+                }
+
             # Calculate average stress from stress values
-            stress_values = [s.get('stressLevel', 0) for s in stress if s.get('stressLevel') is not None]
-            avg_stress = sum(stress_values) / len(stress_values) if stress_values else 0
+            stress_values = []
+            if isinstance(stress, list):
+                stress_values = [s.get('stressLevel', 0) for s in stress if isinstance(s, dict) and s.get('stressLevel') is not None]
+
+            avg_stress = sum(stress_values) / len(stress_values) if stress_values else None
 
             return {
                 'date': target_date.isoformat(),
-                'avg_stress_level': int(avg_stress),
-                'max_stress_level': max(stress_values) if stress_values else 0,
-                'rest_stress_duration': sum(1 for s in stress if s.get('stressLevel', 0) < 25),
-                'low_stress_duration': sum(1 for s in stress if 25 <= s.get('stressLevel', 0) < 50),
-                'medium_stress_duration': sum(1 for s in stress if 50 <= s.get('stressLevel', 0) < 75),
-                'high_stress_duration': sum(1 for s in stress if s.get('stressLevel', 0) >= 75),
+                'avg_stress_level': int(avg_stress) if avg_stress is not None else None,
+                'max_stress_level': max(stress_values) if stress_values else None,
+                'rest_stress_duration': sum(1 for s in stress if isinstance(s, dict) and s.get('stressLevel', 0) < 25),
+                'low_stress_duration': sum(1 for s in stress if isinstance(s, dict) and 25 <= s.get('stressLevel', 0) < 50),
+                'medium_stress_duration': sum(1 for s in stress if isinstance(s, dict) and 50 <= s.get('stressLevel', 0) < 75),
+                'high_stress_duration': sum(1 for s in stress if isinstance(s, dict) and s.get('stressLevel', 0) >= 75),
                 'raw_data': stress
             }
 
@@ -229,16 +249,18 @@ class GarminConnector:
         stats = self.get_daily_stats(target_date)
         stress = self.get_stress_data(target_date)
 
-        # Calculate recovery score
-        sleep_score = min(100, (sleep['sleep_duration_hours'] / 8.0) * 100)
-        sleep_quality = sleep.get('sleep_quality_score', 50)
+        # Calculate recovery score with null safety
+        sleep_hours = sleep.get('sleep_duration_hours')
+        sleep_score = min(100, (sleep_hours / 8.0) * 100) if sleep_hours is not None else 50
+        sleep_quality = sleep.get('sleep_quality_score') or 50
 
         # Resting HR score (lower is better, normalize around 60 bpm)
-        rhr = stats.get('resting_heart_rate', 60)
+        rhr = stats.get('resting_heart_rate') or 60
         rhr_score = max(0, 100 - abs(rhr - 60) * 2)
 
         # Stress score (invert - lower stress = better)
-        stress_score = 100 - stress['avg_stress_level']
+        avg_stress = stress.get('avg_stress_level')
+        stress_score = 100 - avg_stress if avg_stress is not None else 50
 
         # Weighted average
         recovery_score = (

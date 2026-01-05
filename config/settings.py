@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     google_calendar_credentials_path: str = "credentials.json"
     google_calendar_token_path: str = "token.json"
 
+    # Garmin Connect
+    garmin_email: str = ""
+    garmin_password: str = ""
+
     # RAG Settings
     chromadb_path: str = "./chroma_db"
     embedding_model: str = "text-embedding-3-small"
