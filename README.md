@@ -35,6 +35,12 @@ Built with Python, integrating Garmin Connect, Google Calendar, and local LLM (O
 ## Architecture
 
 ```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│  Garmin Connect │    │ Google Calendar │    │ Ollama+Mistral  │
+│      API        │    │      API        │    │  (Local LLM)    │
+└────────┬────────┘    └────────┬────────┘    └────────┬────────┘
+         │                      │                      │
+         ▼                      ▼                      ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                        CRON (every 30 min)                      │
 └─────────────────────────────────────────────────────────────────┘
@@ -56,12 +62,6 @@ Built with Python, integrating Garmin Connect, Google Calendar, and local LLM (O
 │                         PostgreSQL                              │
 │              (health_metrics, activity_data, patterns)          │
 └─────────────────────────────────────────────────────────────────┘
-         │                      │                      │
-         ▼                      ▼                      ▼
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│  Garmin Connect │    │ Google Calendar │    │ Ollama+Mistral  │
-│      API        │    │      API        │    │  (Local LLM)    │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
 
 ---
