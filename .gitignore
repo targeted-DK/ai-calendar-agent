@@ -60,3 +60,6 @@ client_secret*.json
 
 # Unused/archived code
 unused/
+
+# Internal tickets/backlog
+ticket/
