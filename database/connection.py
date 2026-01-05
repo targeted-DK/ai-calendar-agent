@@ -95,7 +95,7 @@ class Database:
 # Convenience functions for common operations
 
 def insert_health_metric(data: Dict[str, Any]) -> int:
-    """Insert health metric and return ID"""
+    """Insert health metric and return ID (skips if duplicate)"""
     query = """
     INSERT INTO health_metrics (
         timestamp, source, sleep_duration_hours, sleep_quality_score,
@@ -104,6 +104,7 @@ def insert_health_metric(data: Dict[str, Any]) -> int:
         %(timestamp)s, %(source)s, %(sleep_duration_hours)s, %(sleep_quality_score)s,
         %(resting_heart_rate)s, %(stress_level)s, %(recovery_score)s, %(steps)s, %(raw_data)s
     )
+    ON CONFLICT (timestamp, source) DO NOTHING
     RETURNING id
     """
     result = Database.execute_one(query, data)
