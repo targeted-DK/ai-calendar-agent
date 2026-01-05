@@ -48,6 +48,7 @@ USER_TIMEZONE = ZoneInfo(os.getenv('USER_TIMEZONE', 'America/Chicago'))
 
 # Paths
 GOALS_FILE = Path(__file__).parent.parent / "config" / "goals.yaml"
+TEMPLATES_FILE = Path(__file__).parent.parent / "config" / "workout_templates.yaml"
 
 
 def load_goals() -> Dict:
@@ -57,6 +58,16 @@ def load_goals() -> Dict:
         return {}
 
     with open(GOALS_FILE, 'r') as f:
+        return yaml.safe_load(f)
+
+
+def load_templates() -> Dict:
+    """Load workout templates for LLM reference."""
+    if not TEMPLATES_FILE.exists():
+        logger.warning(f"Templates file not found: {TEMPLATES_FILE}")
+        return {}
+
+    with open(TEMPLATES_FILE, 'r') as f:
         return yaml.safe_load(f)
 
 
@@ -117,22 +128,45 @@ def get_calendar_context(calendar: GoogleCalendarClient, days: int = 7) -> Dict:
         raw_events = calendar.get_events(now, end)
         for event in raw_events:
             summary = event.get('summary', 'Busy')
-            start = event.get('start', {}).get('dateTime', event.get('start', {}).get('date', ''))
+            start_raw = event.get('start', {}).get('dateTime', event.get('start', {}).get('date', ''))
+            end_raw = event.get('end', {}).get('dateTime', event.get('end', {}).get('date', ''))
+
+            # Parse times for display
+            start_time = ''
+            end_time = ''
+            if 'T' in start_raw:
+                try:
+                    start_dt = datetime.fromisoformat(start_raw.replace('Z', '+00:00'))
+                    end_dt = datetime.fromisoformat(end_raw.replace('Z', '+00:00'))
+                    start_time = start_dt.strftime('%H:%M')
+                    end_time = end_dt.strftime('%H:%M')
+                except:
+                    pass
+
             events.append({
                 'title': summary,
-                'start': start,
+                'start': start_raw,
+                'end': end_raw,
+                'start_time': start_time,
+                'end_time': end_time,
                 'is_workout': summary.lower().startswith('workout:'),
             })
     except Exception as e:
         logger.warning(f"Could not get calendar: {e}")
 
-    # Group by day
+    # Group by day WITH times
     events_by_day = {}
     for event in events:
         day = event['start'][:10] if event['start'] else 'unknown'
         if day not in events_by_day:
             events_by_day[day] = []
-        events_by_day[day].append(event['title'])
+
+        # Include time in the event description
+        if event['start_time'] and event['end_time']:
+            event_str = f"{event['start_time']}-{event['end_time']}: {event['title']}"
+        else:
+            event_str = event['title']
+        events_by_day[day].append(event_str)
 
     return {
         'total_events': len(events),
@@ -185,6 +219,7 @@ def build_llm_prompt(
     calendar: Dict,
     week_progress: Dict,
     target_date: date,
+    templates: Dict = None,
 ) -> str:
     """Build comprehensive prompt for LLM."""
 
@@ -195,6 +230,7 @@ def build_llm_prompt(
     weekly = goals.get('weekly_structure', {})
     hybrid_rules = goals.get('hybrid_rules', [])
     preferences = goals.get('preferences', {})
+    templates = templates or {}
 
     # Manual context from user
     current_notes = goals.get('current_notes', '')
@@ -220,11 +256,14 @@ Injuries: {injuries if injuries else 'none'}
 Focus on: {', '.join(focus_areas) if focus_areas else 'general fitness'}
 Avoid: {', '.join(avoid) if avoid else 'nothing specific'}
 
-=== TODAY'S HEALTH (from Garmin) ===
-Date: {health.get('date')}
+=== CURRENT HEALTH DATA (from Garmin - use as baseline) ===
+Data from: {health.get('date')} (this is the latest available data)
 Recovery Score: {health.get('recovery_score', 'unknown')}/100
-Sleep: {health.get('sleep_hours', 'unknown')} hours
-Stress Level: {health.get('avg_stress', 'unknown')}/100
+Last night's Sleep: {health.get('sleep_hours', 'unknown')} hours
+Current Stress Level: {health.get('avg_stress', 'unknown')}/100
+
+NOTE: Use this as baseline. For future days, assume recovery will improve if rest day or easy workout,
+decrease if hard workout. We don't have future health data - use judgment based on planned activities.
 
 === RECENT WORKOUTS (last 7 days from Garmin) ===
 {json.dumps(recent_workouts[:7], indent=2) if recent_workouts else 'No recent workouts'}
@@ -233,9 +272,11 @@ Stress Level: {health.get('avg_stress', 'unknown')}/100
 Completed: {json.dumps(week_progress.get('completed', {}), indent=2)}
 Targets: {json.dumps(week_progress.get('targets', {}), indent=2)}
 
-=== CALENDAR (next 7 days) ===
+=== CALENDAR (next 7 days) - IMPORTANT: Avoid scheduling during these times! ===
 {json.dumps(calendar.get('events_by_day', {}), indent=2)}
 Existing workouts scheduled: {len(calendar.get('existing_workouts', []))}
+
+NOTE: Times shown as "HH:MM-HH:MM: Event". Schedule workouts BEFORE or AFTER these busy blocks, not during!
 
 === HYBRID TRAINING RULES ===
 {chr(10).join('- ' + r for r in hybrid_rules.get('rules', [])) if isinstance(hybrid_rules, dict) else 'Standard hybrid rules apply'}
@@ -244,6 +285,17 @@ Existing workouts scheduled: {len(calendar.get('existing_workouts', []))}
 Preferred time: {preferences.get('preferred_workout_time', 'morning')}
 Morning hours: {preferences.get('morning_hours', [6, 9])}
 Max workout duration: {preferences.get('max_workout_minutes', 90)} minutes
+
+=== WORKOUT DETAIL FORMAT (IMPORTANT!) ===
+Your workout descriptions must be HIGHLY DETAILED like these examples:
+
+STRENGTH EXAMPLE:
+{templates.get('strength_template', 'Include specific exercises, sets, reps, weights, and backup plan')}
+
+RUN EXAMPLE:
+{templates.get('run_template', 'Include warmup, duration, pace/zones, and backup plan')}
+
+{templates.get('format_instructions', '')}
 
 === YOUR TASK ===
 Plan a workout for {target_date} ({target_date.strftime('%A')}).
@@ -256,23 +308,30 @@ Consider:
 5. Hybrid training rules (separate hard cardio from strength)
 6. Any injuries or focus areas
 
-Respond in this exact JSON format:
+Respond in this exact JSON format. All workout fields must be PLAIN TEXT strings (not nested objects or arrays):
 {{
-    "should_workout": true/false,
-    "reason_if_skip": "reason if should_workout is false",
+    "should_workout": true,
+    "reason_if_skip": "",
     "workout": {{
-        "type": "Run/Bike/Swim/Strength/Rest",
-        "title": "Short title for calendar event",
+        "type": "Run",
+        "title": "Easy Zone 2 Run",
         "duration_minutes": 45,
-        "intensity": "easy/moderate/hard",
+        "intensity": "easy",
         "time_suggestion": "6:30 AM",
-        "warmup": "5 min description",
-        "main_workout": "Detailed main workout description",
-        "cooldown": "5 min description",
-        "target_hr_zone": "Zone 2 (130-145 bpm)" or null,
-        "why_this_workout": "2-3 sentence explanation of why this workout fits today"
+        "warmup": "5 min brisk walk, then dynamic stretches: leg swings (10 each leg), high knees (20), butt kicks (20). 2 min very easy jog.",
+        "main_workout": "30-40 min easy running at conversational pace. Target HR: Zone 2 (130-145 bpm). Cadence: 170-180 spm. Stay on flat terrain. Focus on relaxed shoulders and steady breathing.",
+        "cooldown": "3 min walk, then static stretches: quads, hamstrings, calves (30 sec each side).",
+        "backup_plan": "If low energy: reduce to 20 min easy jog, or substitute with 30 min brisk walk. Minimum: 15 min movement.",
+        "target_hr_zone": "Zone 2 (130-145 bpm)",
+        "why_this_workout": "Easy run to build aerobic base while allowing recovery. Zone 2 work improves fat oxidation and endurance without taxing the body."
     }}
 }}
+
+IMPORTANT:
+- All fields must be plain text strings, NOT objects or arrays
+- Write workout details as readable sentences, not structured data
+- Include specific numbers (sets, reps, weights, distances, times, HR zones)
+- The workout should read like instructions a person can follow
 
 Only respond with the JSON, no other text.
 """
@@ -331,6 +390,95 @@ def call_llm(prompt: str) -> Dict:
         return None
 
 
+def sanitize_workout_response(response: Dict, target_date: date) -> Dict:
+    """Validate and sanitize LLM workout response."""
+    if not response:
+        return None
+
+    issues = []
+
+    # Check required fields
+    workout = response.get('workout', {})
+    if not workout:
+        logger.warning("Sanitizer: No workout object in response")
+        return None
+
+    # Validate and fix time
+    time_str = workout.get('time_suggestion', '6:30 AM')
+    try:
+        hour = 6
+        # Time must contain AM or PM to be valid
+        if 'AM' not in time_str.upper() and 'PM' not in time_str.upper():
+            raise ValueError(f"Invalid time format: {time_str}")
+
+        parts = time_str.upper().replace('AM', '').replace('PM', '').strip().split(':')
+        hour = int(parts[0])
+        if 'PM' in time_str.upper() and hour != 12:
+            hour += 12
+        elif 'AM' in time_str.upper() and hour == 12:
+            hour = 0
+
+        # Validate hour is reasonable (5 AM - 9 PM)
+        if hour < 5:
+            issues.append(f"Time too early ({time_str}), adjusting to 6:00 AM")
+            workout['time_suggestion'] = '6:00 AM'
+        elif hour > 21:
+            issues.append(f"Time too late ({time_str}), adjusting to 6:00 PM")
+            workout['time_suggestion'] = '6:00 PM'
+    except:
+        issues.append(f"Invalid time format ({time_str}), defaulting to 6:30 AM")
+        workout['time_suggestion'] = '6:30 AM'
+
+    # Validate duration (15-180 minutes)
+    duration = workout.get('duration_minutes', 45)
+    try:
+        duration = int(duration)
+        if duration < 15:
+            issues.append(f"Duration too short ({duration} min), adjusting to 20 min")
+            workout['duration_minutes'] = 20
+        elif duration > 180:
+            issues.append(f"Duration too long ({duration} min), adjusting to 90 min")
+            workout['duration_minutes'] = 90
+    except:
+        issues.append(f"Invalid duration, defaulting to 45 min")
+        workout['duration_minutes'] = 45
+
+    # Validate workout type
+    valid_types = ['run', 'bike', 'swim', 'strength', 'rest', 'yoga', 'walk', 'hike']
+    workout_type = workout.get('type', '').lower()
+    if not any(t in workout_type for t in valid_types):
+        issues.append(f"Unknown workout type ({workout_type})")
+
+    # Ensure required text fields exist
+    if not workout.get('warmup'):
+        workout['warmup'] = 'Light movement for 5-10 minutes'
+        issues.append("Missing warmup, added default")
+
+    if not workout.get('main_workout'):
+        workout['main_workout'] = 'Complete planned workout'
+        issues.append("Missing main_workout description")
+
+    if not workout.get('cooldown'):
+        workout['cooldown'] = 'Stretch and recover for 5 minutes'
+        issues.append("Missing cooldown, added default")
+
+    if not workout.get('backup_plan'):
+        workout['backup_plan'] = 'Reduce intensity/duration by 50%, or substitute with easy walk'
+        issues.append("Missing backup_plan, added default")
+
+    # Log issues
+    if issues:
+        logger.warning(f"Sanitizer fixed {len(issues)} issues:")
+        for issue in issues:
+            logger.warning(f"  - {issue}")
+
+    response['workout'] = workout
+    response['_sanitized'] = True
+    response['_issues'] = issues
+
+    return response
+
+
 def create_workout_event(
     calendar: GoogleCalendarClient,
     target_date: date,
@@ -363,6 +511,9 @@ def create_workout_event(
     # Build description
     title = f"Workout: {workout.get('title', workout.get('type', 'Training'))}"
 
+    backup_plan = workout.get('backup_plan', '')
+    backup_section = f"\n⚡ BACKUP PLAN (low energy day):\n{backup_plan}\n" if backup_plan else ""
+
     description = f"""🎯 {workout.get('type', 'Workout')} - {workout.get('intensity', 'moderate').title()} Intensity
 
 ⏱️ Duration: {duration} minutes
@@ -376,7 +527,7 @@ def create_workout_event(
 
 🧘 COOL-DOWN:
 {workout.get('cooldown', 'Stretch and recover for 5 minutes')}
-
+{backup_section}
 💡 WHY THIS WORKOUT:
 {workout.get('why_this_workout', 'Scheduled based on your training plan')}
 
@@ -414,10 +565,13 @@ def has_existing_workout(calendar: GoogleCalendarClient, target_date: date) -> b
     try:
         events = calendar.get_events(day_start, day_end)
         for event in events:
-            if event.get('summary', '').lower().startswith('workout:'):
+            summary = event.get('summary', '')
+            if summary.lower().startswith('workout:'):
+                logger.info(f"Found existing workout on {target_date}: {summary}")
                 return True
-    except:
-        pass
+        logger.info(f"No existing workout on {target_date}. Events: {[e.get('summary', '') for e in events]}")
+    except Exception as e:
+        logger.warning(f"Error checking workouts for {target_date}: {e}")
     return False
 
 
@@ -434,6 +588,10 @@ def plan_workouts(days_ahead: int = 3, dry_run: bool = False) -> Dict:
         logger.error("No goals configured. Please edit config/goals.yaml")
         return {'success': False, 'error': 'No goals configured'}
     logger.info(f"Loaded goals: {goals.get('primary_goal', {}).get('title', 'Unknown')}")
+
+    # Load workout templates
+    templates = load_templates()
+    logger.info(f"Loaded {len(templates)} workout templates")
 
     # Initialize connections
     try:
@@ -481,6 +639,7 @@ def plan_workouts(days_ahead: int = 3, dry_run: bool = False) -> Dict:
             calendar=calendar_context,
             week_progress=week_progress,
             target_date=target_date,
+            templates=templates,
         )
 
         logger.info("Calling LLM...")
@@ -489,6 +648,13 @@ def plan_workouts(days_ahead: int = 3, dry_run: bool = False) -> Dict:
         if not llm_response:
             logger.error("LLM failed to respond")
             results.append({'date': str(target_date), 'status': 'llm_error'})
+            continue
+
+        # Sanitize and validate the response
+        llm_response = sanitize_workout_response(llm_response, target_date)
+        if not llm_response:
+            logger.error("Response failed sanitization")
+            results.append({'date': str(target_date), 'status': 'sanitization_error'})
             continue
 
         # Check if LLM recommends workout

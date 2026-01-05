@@ -1,0 +1,301 @@
+# Workout Templates - Reference for LLM when generating workout plans
+# These examples show the expected level of detail for each workout type
+
+# =============================================================================
+# STRENGTH TEMPLATES
+# =============================================================================
+strength_template: |
+  Full-body strength session.
+
+  MAIN LIFTS (with 6-week progression):
+
+  Back Squat 4x6 (PR 210):
+  - Weeks 1–2: 145 lb
+  - Weeks 3–4: 155 lb
+  - Weeks 5–6: 165 lb
+  (If any week feels too heavy, repeat the same weight next week instead of increasing.)
+
+  Bench Press 4x6 (PR 120):
+  - Weeks 1–2: 90 lb
+  - Weeks 3–4: 95 lb
+  - Weeks 5–6: 100 lb
+
+  Romanian Deadlift 3x8:
+  - Weeks 1–2: 135 lb
+  - Weeks 3–4: 145 lb
+  - Weeks 5–6: 155 lb
+
+  ACCESSORIES (start moderate and progress when smooth):
+  - Lat Pulldown 3x10: start ~85 lb stack
+  - DB Shoulder Press 3x10: start ~35 lb each
+  - Plank 3x45–60s
+
+  BACKUP PLAN (low energy day):
+  - Back Squat: 3x5 at that week's target weight (or 10 lb lighter)
+  - Bench: 3x5 at that week's target (or 5 lb lighter)
+  - Skip RDL and most accessories.
+  - Minimum acceptable session: Warm up + Squat + Bench.
+
+# =============================================================================
+# RUNNING TEMPLATES
+# =============================================================================
+easy_run_template: |
+  Easy aerobic run - Zone 2 recovery focus.
+
+  WARM-UP (10 min):
+  - 5 min brisk walk
+  - Dynamic stretches: leg swings (10 each), high knees (20), butt kicks (20)
+  - 2 min very easy jog
+
+  MAIN RUN:
+  - Duration: 30-45 min
+  - Pace: Conversational (can speak full sentences)
+  - Target HR: Zone 2 (130-145 bpm, ~65-75% max HR)
+  - Cadence: 170-180 spm
+  - Terrain: Flat to gentle rolling
+
+  COOLDOWN (5 min):
+  - 3 min walk
+  - Static stretches: quads, hamstrings, calves (30s each)
+
+  BACKUP PLAN (low energy):
+  - Reduce to 20 min easy jog
+  - Or substitute: 30 min brisk walk
+  - Minimum: 15 min movement at any pace
+
+tempo_run_template: |
+  Tempo run - Lactate threshold training.
+
+  WARM-UP (15 min):
+  - 5 min easy jog
+  - Dynamic drills: A-skips, B-skips, high knees (30m each)
+  - 4x100m strides with walk back recovery
+
+  MAIN WORKOUT:
+  - 20-30 min at tempo pace
+  - Pace: "Comfortably hard" - can speak ~3-4 words
+  - Target HR: Zone 4 (160-175 bpm, ~85-90% max HR)
+  - RPE: 7-8/10
+
+  Alternative structure:
+  - 3x10 min tempo with 2 min easy jog between
+
+  COOLDOWN (10 min):
+  - 5 min easy jog
+  - 5 min walking + stretching
+
+  BACKUP PLAN (low energy):
+  - Convert to easy run (Zone 2)
+  - Or: 2x10 min tempo instead of continuous
+  - Minimum: Warmup + 10 min tempo + cooldown
+
+long_run_template: |
+  Long run - Aerobic endurance building.
+
+  WARM-UP (10 min):
+  - Start with 10 min very easy running
+  - No need for drills - just ease into pace
+
+  MAIN RUN:
+  - Duration: 60-90 min (or distance-based: 10-15 miles)
+  - Pace: Easy, conversational (slower than easy run pace)
+  - Target HR: Zone 2 (125-140 bpm)
+  - Fueling: Water every 20 min, gel/chews at 45 min if >75 min
+
+  Progression:
+  - Week 1-2: 60 min
+  - Week 3-4: 75 min
+  - Week 5-6: 90 min
+
+  COOLDOWN (10 min):
+  - 5 min walk
+  - Foam rolling: quads, IT band, calves
+  - Static stretching
+
+  BACKUP PLAN (low energy):
+  - Reduce duration by 25-30%
+  - Walk breaks every 15-20 min (1-2 min each)
+  - Minimum: 45 min easy effort
+
+# =============================================================================
+# CYCLING TEMPLATES
+# =============================================================================
+easy_bike_template: |
+  Easy cycling - Zone 2 aerobic base.
+
+  WARM-UP (10 min):
+  - 5 min easy spinning (90-100 rpm, low resistance)
+  - Gradually increase to working cadence
+  - 3x30 sec spin-ups (high cadence, low power)
+
+  MAIN RIDE:
+  - Duration: 45-60 min
+  - Power: Zone 2 (55-75% FTP) or ~130-145 bpm
+  - Cadence: 85-95 rpm
+  - Terrain: Flat to rolling (avoid big climbs)
+
+  Focus points:
+  - Smooth pedal stroke
+  - Relaxed upper body
+  - Nose breathing when possible
+
+  COOLDOWN (5 min):
+  - 5 min very easy spinning
+  - Off-bike: quad and hip flexor stretch
+
+  BACKUP PLAN (low energy):
+  - Reduce to 30 min
+  - Indoor trainer: 30 min easy spin
+  - Minimum: 20 min movement
+
+tempo_bike_template: |
+  Tempo/Sweet Spot cycling - Threshold development.
+
+  WARM-UP (15 min):
+  - 10 min progressive warm-up (Zone 1 → Zone 2)
+  - 3x1 min builds to tempo effort with 1 min easy between
+
+  MAIN WORKOUT:
+  Option A - Continuous:
+  - 2x20 min at sweet spot (88-94% FTP)
+  - 5 min easy between intervals
+  - Target HR: 155-170 bpm
+  - Cadence: 85-95 rpm
+
+  Option B - Intervals:
+  - 4x10 min at tempo (76-90% FTP)
+  - 3 min recovery between
+
+  COOLDOWN (10 min):
+  - 10 min easy spinning
+  - Stretching focus: hip flexors, quads
+
+  BACKUP PLAN (low energy):
+  - 1x20 min sweet spot only
+  - Or convert to Zone 2 endurance ride
+  - Minimum: Warmup + 1x15 min tempo
+
+long_bike_template: |
+  Long ride - Endurance and time in saddle.
+
+  WARM-UP:
+  - First 15-20 min is your warmup
+  - Start very easy and build into Zone 2
+
+  MAIN RIDE:
+  - Duration: 2-3 hours
+  - Power: Mostly Zone 2 (55-75% FTP)
+  - Include terrain variety if possible
+
+  Fueling plan:
+  - Bottle 1: Water
+  - Bottle 2: Electrolyte mix
+  - Food: 200-250 cal/hour after first hour
+
+  Progression:
+  - Week 1-2: 2 hours
+  - Week 3-4: 2.5 hours
+  - Week 5-6: 3 hours
+
+  Optional intensity:
+  - Add 2-3x5 min tempo efforts in final hour
+
+  COOLDOWN:
+  - Final 10 min very easy spinning
+  - Post-ride: Protein + carbs within 30 min
+
+  BACKUP PLAN (low energy):
+  - Cut duration by 30-40%
+  - Stay strictly Zone 2 (no tempo)
+  - Indoor option: 60-90 min trainer ride
+  - Minimum: 60 min easy riding
+
+# =============================================================================
+# SWIMMING TEMPLATES
+# =============================================================================
+swim_technique_template: |
+  Technique-focused swim - Drill work and form.
+
+  WARM-UP (400m):
+  - 200m easy freestyle
+  - 100m kick with board
+  - 4x25m drill choice (catch-up, fingertip drag)
+
+  MAIN SET (1200-1500m):
+
+  Drill Block (400m):
+  - 4x50m catch-up drill, focus on full extension
+  - 4x50m fingertip drag, focus on high elbow
+
+  Build Block (400m):
+  - 4x100m freestyle, build each 100 (easy→moderate→fast→easy)
+  - Focus: Apply drill technique
+
+  Pull Block (400m):
+  - 4x100m with pull buoy
+  - Focus: Hip rotation and catch
+
+  COOLDOWN (200m):
+  - 100m easy backstroke
+  - 100m easy freestyle
+
+  TOTAL: ~1800-2100m (50-60 min)
+
+  BACKUP PLAN (low energy/crowded):
+  - Skip pull block
+  - Reduce to 1200m total
+  - Minimum: Warmup + 400m drill work
+
+swim_endurance_template: |
+  Endurance swim - Building aerobic base.
+
+  WARM-UP (400m):
+  - 200m easy freestyle
+  - 4x50m (25 drill / 25 swim)
+
+  MAIN SET (1600-2000m):
+
+  Continuous Block:
+  - 800-1000m continuous freestyle
+  - Pace: Steady, sustainable
+  - Focus: Breathing pattern (every 3 strokes)
+  - Target: Consistent splits (within 5 sec/100m)
+
+  Interval Block:
+  - 8x100m freestyle @ moderate effort
+  - Rest: 15-20 sec between
+  - Descend 1-4, 5-8 (get faster each set of 4)
+
+  COOLDOWN (200m):
+  - 100m easy choice stroke
+  - 100m easy freestyle
+
+  TOTAL: ~2200-2600m (55-70 min)
+
+  BACKUP PLAN (low energy):
+  - Reduce main set to 1200m
+  - Longer rest intervals (30 sec)
+  - Minimum: 1500m total easy swimming
+
+# =============================================================================
+# FORMAT INSTRUCTIONS FOR LLM
+# =============================================================================
+format_instructions: |
+  When creating workout plans, follow this structure:
+
+  1. WARM-UP: Specific activities, duration, and purpose
+  2. MAIN WORKOUT:
+     - For strength: Sets, reps, specific weights, progression
+     - For cardio: Duration/distance, pace, HR zones, cadence
+  3. COOLDOWN: Recovery activities and stretching
+  4. BACKUP PLAN: What to do on low energy days (REQUIRED)
+
+  Always include:
+  - Specific numbers (weights, distances, times, reps)
+  - Heart rate zones or RPE guidance
+  - Cadence/technique cues where applicable
+  - Progressive overload suggestions
+  - Minimum acceptable session for bad days
+
+  The workout should be detailed enough that the user can follow it
+  without needing additional guidance or looking anything up.
