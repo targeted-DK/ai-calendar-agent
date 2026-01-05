@@ -4,6 +4,7 @@ Test database connection and basic operations
 """
 import sys
 from datetime import datetime, timedelta
+from psycopg2 import sql
 from connection import (
     Database,
     insert_health_metric,
@@ -109,7 +110,11 @@ def test_database_connection():
         print(f"   ✅ Database has {len(tables)} tables:")
         for table in tables:
             # Count rows in each table
-            count = Database.execute_one(f"SELECT COUNT(*) as count FROM {table['tablename']}")
+            # Use sql.Identifier to safely quote table names (prevents SQL injection)
+            query = sql.SQL("SELECT COUNT(*) as count FROM {}").format(
+                sql.Identifier(table['tablename'])
+            )
+            count = Database.execute_one(query)
             print(f"      • {table['tablename']}: {count['count']} rows")
 
         print("\n" + "="*60)
