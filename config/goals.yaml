@@ -20,23 +20,24 @@ primary_goal:
 # SECONDARY GOAL (Hybrid Training)
 # =============================================================================
 secondary_goal:
-  type: "muscle_building"
-  title: "Increase Muscle Mass"
-  description: "Build strength and muscle while maintaining endurance base"
+  type: "Strength training"
+  title: "Increase strength and muscle mass"
+  description: "Build strength and muscle mass while maintaining endurance base"
   focus_areas:
     - "upper body"
     - "core"
     - "leg strength for power"
+    - "remaining areas"
 
 # =============================================================================
 # CURRENT FITNESS LEVEL
 # =============================================================================
 fitness_level:
-  swimming: "beginner"                 # beginner, intermediate, advanced
+  swimming: "intermediate"                 # beginner, intermediate, advanced
   cycling: "intermediate"
   running: "intermediate"
-  strength: "beginner"
-  notes: "Comfortable with 10K runs and 30-mile bike rides"
+  strength: "intermediate, Bench Press PR : 160lbs, Deadlift PR : 180lbs, Squats PR : 220lbs"
+  notes: "Comfortable with 4K runs and 8-mile bike rides"
 
 # =============================================================================
 # TRAINING PHASE
@@ -56,9 +57,9 @@ phase_descriptions:
 # =============================================================================
 weekly_structure:
   # Endurance (Ironman prep)
-  swim_sessions: 2
+  swim_sessions: 0
   bike_sessions: 2
-  run_sessions: 3
+  run_sessions: 2
 
   # Strength (Muscle building)
   strength_sessions: 3                 # Full body or push/pull/legs
@@ -66,7 +67,7 @@ weekly_structure:
   # Recovery
   rest_days: 1
 
-  # Typical week layout
+  # Typical week layout but this is only an example
   example_week:
     monday: "Strength (Push) + Easy Run"
     tuesday: "Swim + Bike"
@@ -84,13 +85,13 @@ hybrid_rules:
   rules:
     - "Separate hard cardio and heavy strength by 6+ hours when possible"
     - "Do strength before cardio if same session"
-    - "Prioritize protein intake post-strength (within 2 hours)"
+    - "Prioritize protein intake post-strength (wit:hin 2 hours)"
     - "Don't do heavy leg strength day before long run/bike"
     - "Keep easy days easy - don't stack hard sessions"
 
   # Balance priorities
-  strength_priority: 0.4               # 40% focus
-  endurance_priority: 0.6              # 60% focus
+  strength_priority: 0.5               # 40% focus
+  endurance_priority: 0.5              # 60% focus
 
   # Recovery needs for hybrid
   min_sleep_hours: 7.5
@@ -100,8 +101,9 @@ hybrid_rules:
 # PREFERENCES
 # =============================================================================
 preferences:
-  preferred_workout_time: "morning"    # morning, afternoon, evening
-  morning_hours: [6, 9]                # 6 AM - 9 AM
+  preferred_workout_time: "flexible"   # morning, evening, flexible (tries morning, falls back to evening)
+  morning_hours: [5, 8]                # 5 AM - 8 AM
+  evening_hours: [17, 20]              # 5 PM - 8 PM (fallback if morning blocked)
   max_workout_minutes: 120             # Cap single session
 
   # Days to avoid hard training
@@ -120,7 +122,7 @@ preferences:
 # =============================================================================
 weekly_targets:
   total_training_hours: 10             # Hours per week
-  swim_distance_yards: 4000            # ~2 sessions
+  swim_distance_yards: 0            # ~2 sessions
   bike_distance_miles: 60              # ~2 sessions
   run_distance_miles: 15               # ~3 sessions
   strength_sessions: 3
@@ -133,7 +135,7 @@ weekly_targets:
 current_notes: |
   Starting fresh with hybrid training.
   Want to build base fitness before committing to a specific race.
-
+  
 # Life circumstances affecting training
 life_context:
   work_intensity: "normal"             # light, normal, heavy, crazy
@@ -159,8 +161,8 @@ injuries: []
 
 # Things you want to focus on improving
 focus_areas:
-  - "swimming technique"               # Weakest Ironman discipline
   - "upper body strength"
+  - "cycling endurance"
 
 # Things to avoid or reduce
 avoid:

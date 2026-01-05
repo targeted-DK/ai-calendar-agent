@@ -21,7 +21,7 @@ import os
 import yaml
 from datetime import datetime, timedelta, date
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 # Setup logging
@@ -284,7 +284,10 @@ NOTE: Times shown as "HH:MM-HH:MM: Event". Schedule workouts BEFORE or AFTER the
 === PREFERENCES ===
 Preferred time: {preferences.get('preferred_workout_time', 'morning')}
 Morning hours: {preferences.get('morning_hours', [6, 9])}
+Evening hours: {preferences.get('evening_hours', [17, 20])} (fallback if morning blocked)
 Max workout duration: {preferences.get('max_workout_minutes', 90)} minutes
+
+SCHEDULING RULE: {"Try MORNING first. If morning is blocked by calendar events, schedule in EVENING instead." if preferences.get('preferred_workout_time') == 'flexible' else f"Schedule during {preferences.get('preferred_workout_time', 'morning')} hours."}
 
 === WORKOUT DETAIL FORMAT (IMPORTANT!) ===
 Your workout descriptions must be HIGHLY DETAILED like these examples:
@@ -304,9 +307,10 @@ Consider:
 1. Recovery score and whether to go hard or easy
 2. What workouts were done recently (avoid repeating same type back-to-back)
 3. Weekly targets vs completed (what's missing?)
-4. Calendar conflicts
-5. Hybrid training rules (separate hard cardio from strength)
-6. Any injuries or focus areas
+4. Calendar conflicts - CHECK BUSY TIMES and schedule around them
+5. Time preference - if morning is blocked, use evening slot
+6. Hybrid training rules (separate hard cardio from strength)
+7. Any injuries or focus areas
 
 Respond in this exact JSON format. All workout fields must be PLAIN TEXT strings (not nested objects or arrays):
 {{
@@ -407,16 +411,27 @@ def sanitize_workout_response(response: Dict, target_date: date) -> Dict:
     time_str = workout.get('time_suggestion', '6:30 AM')
     try:
         hour = 6
-        # Time must contain AM or PM to be valid
-        if 'AM' not in time_str.upper() and 'PM' not in time_str.upper():
-            raise ValueError(f"Invalid time format: {time_str}")
+        minute = 0
 
-        parts = time_str.upper().replace('AM', '').replace('PM', '').strip().split(':')
-        hour = int(parts[0])
-        if 'PM' in time_str.upper() and hour != 12:
-            hour += 12
-        elif 'AM' in time_str.upper() and hour == 12:
-            hour = 0
+        # Handle 24-hour format (e.g., "15:00", "17:30")
+        if 'AM' not in time_str.upper() and 'PM' not in time_str.upper():
+            # Try to parse as 24-hour format
+            clean_time = time_str.split('-')[0].strip()  # Handle "15:00-16:00" -> "15:00"
+            if ':' in clean_time:
+                parts = clean_time.split(':')
+                hour = int(parts[0])
+                minute = int(parts[1]) if len(parts) > 1 else 0
+            else:
+                raise ValueError(f"Invalid time format: {time_str}")
+        else:
+            # Handle AM/PM format
+            parts = time_str.upper().replace('AM', '').replace('PM', '').strip().split(':')
+            hour = int(parts[0])
+            minute = int(parts[1]) if len(parts) > 1 else 0
+            if 'PM' in time_str.upper() and hour != 12:
+                hour += 12
+            elif 'AM' in time_str.upper() and hour == 12:
+                hour = 0
 
         # Validate hour is reasonable (5 AM - 9 PM)
         if hour < 5:
@@ -425,6 +440,14 @@ def sanitize_workout_response(response: Dict, target_date: date) -> Dict:
         elif hour > 21:
             issues.append(f"Time too late ({time_str}), adjusting to 6:00 PM")
             workout['time_suggestion'] = '6:00 PM'
+        else:
+            # Convert to AM/PM format for consistency
+            if hour < 12:
+                workout['time_suggestion'] = f"{hour}:{minute:02d} AM"
+            elif hour == 12:
+                workout['time_suggestion'] = f"12:{minute:02d} PM"
+            else:
+                workout['time_suggestion'] = f"{hour - 12}:{minute:02d} PM"
     except:
         issues.append(f"Invalid time format ({time_str}), defaulting to 6:30 AM")
         workout['time_suggestion'] = '6:30 AM'
@@ -557,8 +580,32 @@ Based on recovery score, calendar, and training goals
         return None
 
 
-def has_existing_workout(calendar: GoogleCalendarClient, target_date: date) -> bool:
-    """Check if workout already scheduled for this date."""
+def extract_workout_type(title: str) -> str:
+    """Extract workout type from title like 'Workout: Easy Run' -> 'run'."""
+    title_lower = title.lower()
+
+    # Check for known types in the title
+    if any(x in title_lower for x in ['run', 'running', 'jog']):
+        return 'run'
+    if any(x in title_lower for x in ['bike', 'cycling', 'cycle', 'ride']):
+        return 'bike'
+    if any(x in title_lower for x in ['swim', 'pool']):
+        return 'swim'
+    if any(x in title_lower for x in ['strength', 'lift', 'weight', 'gym']):
+        return 'strength'
+    if any(x in title_lower for x in ['yoga', 'stretch', 'mobility']):
+        return 'yoga'
+    if any(x in title_lower for x in ['walk', 'hike']):
+        return 'walk'
+    if 'rest' in title_lower:
+        return 'rest'
+
+    # Fallback: return first word after "Workout:"
+    return title.replace('Workout:', '').strip().split()[0].lower()
+
+
+def get_existing_workout(calendar: GoogleCalendarClient, target_date: date) -> Optional[Dict]:
+    """Get existing workout for a date (if any)."""
     day_start = datetime.combine(target_date, datetime.min.time(), tzinfo=USER_TIMEZONE)
     day_end = day_start + timedelta(days=1)
 
@@ -567,12 +614,81 @@ def has_existing_workout(calendar: GoogleCalendarClient, target_date: date) -> b
         for event in events:
             summary = event.get('summary', '')
             if summary.lower().startswith('workout:'):
-                logger.info(f"Found existing workout on {target_date}: {summary}")
-                return True
-        logger.info(f"No existing workout on {target_date}. Events: {[e.get('summary', '') for e in events]}")
+                workout_type = extract_workout_type(summary)
+                return {
+                    'id': event.get('id'),
+                    'title': summary,
+                    'type': workout_type,
+                    'start': event.get('start', {}).get('dateTime', ''),
+                }
+        logger.info(f"No existing workout on {target_date}")
     except Exception as e:
         logger.warning(f"Error checking workouts for {target_date}: {e}")
-    return False
+    return None
+
+
+def delete_workout(calendar: GoogleCalendarClient, event_id: str, reason: str, dry_run: bool = False) -> bool:
+    """Delete a workout event."""
+    if dry_run:
+        logger.info(f"[DRY RUN] Would delete workout: {reason}")
+        return True
+    try:
+        calendar.delete_event(event_id)
+        logger.info(f"Deleted workout: {reason}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to delete workout: {e}")
+        return False
+
+
+def should_reschedule(existing_workout: Dict, goals: Dict, week_progress: Dict) -> Tuple[bool, str]:
+    """
+    Determine if an existing workout should be deleted and rescheduled.
+
+    Returns (should_reschedule, reason)
+    """
+    existing_type = existing_workout.get('type', '').lower()
+
+    # Get configured workout types from goals
+    weekly = goals.get('weekly_structure', {})
+    configured_types = []
+    if weekly.get('run_sessions', 0) > 0:
+        configured_types.append('run')
+    if weekly.get('bike_sessions', 0) > 0:
+        configured_types.extend(['bike', 'cycling'])
+    if weekly.get('swim_sessions', 0) > 0:
+        configured_types.append('swim')
+    if weekly.get('strength_sessions', 0) > 0:
+        configured_types.extend(['strength', 'lifting', 'weight'])
+
+    # Check if workout type is no longer in config
+    type_still_valid = any(t in existing_type for t in configured_types) if configured_types else True
+    if not type_still_valid:
+        return True, f"Workout type '{existing_type}' no longer in goals config"
+
+    # Check if we've already exceeded target for this type
+    completed = week_progress.get('completed', {})
+    targets = week_progress.get('targets', {})
+
+    if 'run' in existing_type:
+        if completed.get('runs', 0) >= targets.get('runs', 99):
+            return True, f"Already met run target ({completed.get('runs')}/{targets.get('runs')})"
+    elif any(t in existing_type for t in ['bike', 'cycling']):
+        if completed.get('bike', 0) >= targets.get('bike', 99):
+            return True, f"Already met bike target ({completed.get('bike')}/{targets.get('bike')})"
+    elif 'swim' in existing_type:
+        if completed.get('swim', 0) >= targets.get('swim', 99):
+            return True, f"Already met swim target ({completed.get('swim')}/{targets.get('swim')})"
+    elif any(t in existing_type for t in ['strength', 'lift', 'weight']):
+        if completed.get('strength', 0) >= targets.get('strength', 99):
+            return True, f"Already met strength target ({completed.get('strength')}/{targets.get('strength')})"
+
+    return False, ""
+
+
+def has_existing_workout(calendar: GoogleCalendarClient, target_date: date) -> bool:
+    """Check if workout already scheduled for this date (backward compat)."""
+    return get_existing_workout(calendar, target_date) is not None
 
 
 def plan_workouts(days_ahead: int = 3, dry_run: bool = False) -> Dict:
@@ -626,10 +742,21 @@ def plan_workouts(days_ahead: int = 3, dry_run: bool = False) -> Dict:
         logger.info(f"\n--- {target_date} ({target_date.strftime('%A')}) ---")
 
         # Check for existing workout
-        if has_existing_workout(calendar, target_date):
-            logger.info("Already has workout scheduled, skipping")
-            results.append({'date': str(target_date), 'status': 'already_scheduled'})
-            continue
+        existing = get_existing_workout(calendar, target_date)
+        if existing:
+            logger.info(f"Found existing: {existing['title']}")
+
+            # Check if it should be rescheduled based on current state
+            needs_reschedule, reason = should_reschedule(existing, goals, week_progress)
+
+            if needs_reschedule:
+                logger.info(f"RESCHEDULING: {reason}")
+                delete_workout(calendar, existing['id'], reason, dry_run)
+                # Continue to create new workout below
+            else:
+                logger.info("Existing workout still valid, keeping")
+                results.append({'date': str(target_date), 'status': 'already_scheduled'})
+                continue
 
         # Build prompt and call LLM
         prompt = build_llm_prompt(
