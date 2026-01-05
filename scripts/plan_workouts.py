@@ -220,8 +220,10 @@ def build_llm_prompt(
     week_progress: Dict,
     target_date: date,
     templates: Dict = None,
+    created_this_run: List[Dict] = None,
 ) -> str:
     """Build comprehensive prompt for LLM."""
+    created_this_run = created_this_run or []
 
     # Format goals
     primary = goals.get('primary_goal', {})
@@ -274,7 +276,15 @@ Targets: {json.dumps(week_progress.get('targets', {}), indent=2)}
 
 === CALENDAR (next 7 days) - IMPORTANT: Avoid scheduling during these times! ===
 {json.dumps(calendar.get('events_by_day', {}), indent=2)}
-Existing workouts scheduled: {len(calendar.get('existing_workouts', []))}
+
+=== ALREADY SCHEDULED WORKOUTS (DO NOT DUPLICATE TYPES ON CONSECUTIVE DAYS!) ===
+{chr(10).join(f"- {w['start'][:10]}: {w['title']}" for w in calendar.get('existing_workouts', [])) if calendar.get('existing_workouts') else 'No workouts scheduled yet'}
+
+=== WORKOUTS JUST PLANNED IN THIS SESSION (VERY IMPORTANT!) ===
+{chr(10).join(f"- {w['date']}: {w['type']} - {w['title']}" for w in created_this_run) if created_this_run else 'None yet - you are planning the first day'}
+
+CRITICAL: Look at BOTH sections above. Do NOT schedule the same workout type on back-to-back days.
+If yesterday or tomorrow has Strength, schedule Run or Bike today instead. Vary the workout types!
 
 NOTE: Times shown as "HH:MM-HH:MM: Event". Schedule workouts BEFORE or AFTER these busy blocks, not during!
 
@@ -737,6 +747,9 @@ def plan_workouts(days_ahead: int = 3, dry_run: bool = False) -> Dict:
 
     results = []
 
+    # Track workouts created in THIS run (to avoid data race)
+    created_this_run = []
+
     for i in range(days_ahead):
         target_date = (datetime.now(USER_TIMEZONE) + timedelta(days=i)).date()
         logger.info(f"\n--- {target_date} ({target_date.strftime('%A')}) ---")
@@ -767,6 +780,7 @@ def plan_workouts(days_ahead: int = 3, dry_run: bool = False) -> Dict:
             week_progress=week_progress,
             target_date=target_date,
             templates=templates,
+            created_this_run=created_this_run,
         )
 
         logger.info("Calling LLM...")
@@ -802,6 +816,13 @@ def plan_workouts(days_ahead: int = 3, dry_run: bool = False) -> Dict:
                 'date': str(target_date),
                 'status': 'created' if not dry_run else 'dry_run',
                 'workout': workout
+            })
+
+            # Track this workout for next iteration (avoid data race)
+            created_this_run.append({
+                'date': str(target_date),
+                'type': workout.get('type', 'Unknown'),
+                'title': workout.get('title', 'Workout'),
             })
 
             # Update week progress for next iteration

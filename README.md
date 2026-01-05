@@ -1,231 +1,267 @@
-# Life Optimization AI - Calendar Agent
+# AI Fitness Scheduler
 
-**Autonomous AI agent that optimizes your daily schedule based on health, fitness, and productivity data.**
+**An intelligent workout scheduling system that automatically plans, adjusts, and optimizes your training based on real-time health data and calendar availability.**
 
-Integrates with Garmin, Strava, and Google Calendar to proactively manage your calendar based on:
-- Sleep quality and recovery metrics
-- Training load and workout patterns
-- Calendar density and meeting patterns
-- Learned preferences over time
+Built with Python, integrating Garmin Connect, Google Calendar, and local LLM (Ollama + Mistral) to create a fully autonomous fitness planning system.
 
 ---
 
-## 🎯 Current Status
+## Features
 
-**This is a work-in-progress project being actively developed.**
+### Intelligent Workout Planning
+- **LLM-powered scheduling** - Uses local Mistral 7B to generate detailed, personalized workout plans
+- **Health-aware decisions** - Adjusts intensity based on recovery score, sleep quality, and stress levels
+- **Calendar-aware** - Automatically avoids scheduling conflicts with work, meetings, and other events
+- **Flexible timing** - Schedules morning workouts by default, falls back to evening if morning is blocked
 
-**What's implemented:**
-- ✅ Basic agent architecture (BaseAgent, SchedulerAgent, PatternAgent)
-- ✅ Google Calendar integration (OAuth + CRUD operations)
-- ✅ RAG system with ChromaDB
-- ✅ Multi-LLM support (Claude, GPT-4, Gemini)
-- ✅ Basic calendar tools (5 tools)
+### Active Rescheduling
+- **Config-driven updates** - Change your goals in YAML, workouts automatically adjust
+- **Conflict detection** - Detects when calendar changes conflict with scheduled workouts
+- **Smart rebalancing** - Removes workout types you no longer want, replaces with current priorities
 
-**What's planned:**
-- 🚧 Garmin health data integration
-- 🚧 Strava fitness data integration
-- 🚧 HealthMonitorAgent (sleep, HR, stress analysis)
-- 🚧 ProductivityAnalyzerAgent (calendar pattern analysis)
-- 🚧 Autonomous optimization workflow
-- 🚧 Safety rules and edge case detection
-- 🚧 Notification system (Telegram/email)
+### Health-Based Adaptation
+- **Recovery monitoring** - Reads recovery score from Garmin
+- **Sleep tracking** - Adjusts workout intensity based on sleep quality
+- **Stress awareness** - Suggests easier workouts on high-stress days
+- **Backup plans** - Every workout includes a low-energy alternative
+
+### Workout Reconciliation
+- **Planned vs Actual** - Compares scheduled workouts with Garmin activities
+- **Automatic updates** - Marks completed workouts, logs discrepancies
+- **Pattern learning** - Tracks when you deviate from plan for future optimization
 
 ---
 
-## 📁 Project Structure
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        CRON (every 30 min)                      │
+└─────────────────────────────────────────────────────────────────┘
+                                 │
+         ┌───────────────────────┼───────────────────────┐
+         ▼                       ▼                       ▼
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│  Garmin Import  │    │  Reconciliation │    │ Workout Planner │
+│                 │    │                 │    │                 │
+│ • Sleep data    │    │ • Compare plan  │    │ • Read config   │
+│ • Recovery      │    │   vs actual     │    │ • Check health  │
+│ • Activities    │    │ • Detect        │    │ • Check calendar│
+│ • Stress        │    │   conflicts     │    │ • Call LLM      │
+└────────┬────────┘    │ • Health adapt  │    │ • Create events │
+         │             └────────┬────────┘    └────────┬────────┘
+         │                      │                      │
+         ▼                      ▼                      ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                         PostgreSQL                              │
+│              (health_metrics, activity_data, patterns)          │
+└─────────────────────────────────────────────────────────────────┘
+         │                      │                      │
+         ▼                      ▼                      ▼
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│  Garmin Connect │    │ Google Calendar │    │ Ollama+Mistral  │
+│      API        │    │      API        │    │  (Local LLM)    │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+```
+
+---
+
+## Project Structure
 
 ```
 ai-calendar-agent/
-├── agents/              # AI agents
-│   ├── base_agent.py         # Base class with tool calling
-│   ├── scheduler_agent.py    # Calendar scheduling
-│   └── pattern_agent.py      # Pattern learning
-├── integrations/        # External APIs
-│   └── google_calendar.py    # Google Calendar OAuth + API
-├── tools/              # Agent tools
-│   └── calendar_tools.py     # 5 calendar manipulation tools
-├── rag/                # Pattern learning
-│   ├── vector_store.py       # ChromaDB wrapper
-│   └── embeddings.py         # OpenAI embeddings
-├── config/             # Configuration
-│   └── settings.py           # Pydantic settings
-├── docs/               # Documentation (reference)
-│   ├── COMPLETE_MENTAL_MODEL.md
-│   ├── LIFE_OPTIMIZATION_DESIGN.md
-│   ├── PRACTICAL_DEPLOYMENT_FAQ.md
-│   └── ...
-├── main.py             # Interactive CLI
-├── example_usage.py    # Usage examples
-├── requirements.txt    # Dependencies
-├── .env.example       # Environment template
-└── setup.sh           # Quick setup script
+├── scripts/
+│   ├── plan_workouts.py      # LLM-powered workout planning
+│   ├── reconcile_workouts.py # Compare planned vs actual + conflict detection
+│   ├── import_garmin_data.py # Import health/activity data
+│   └── run_import.sh         # Cron orchestrator
+├── config/
+│   ├── goals.yaml            # Training goals and preferences
+│   └── workout_templates.yaml# Detailed workout templates for LLM
+├── integrations/
+│   ├── google_calendar.py    # Google Calendar API client
+│   └── garmin_connector.py   # Garmin Connect API client
+├── database/
+│   ├── connection.py         # PostgreSQL connection pool
+│   └── init_db.py           # Schema initialization
+├── tests/
+│   └── test_workout_functions.py # Regression tests
+├── .github/workflows/
+│   └── test.yml              # CI pipeline
+└── logs/                     # Runtime logs
 ```
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 - Python 3.9+
-- Google Calendar API credentials ([Get them here](https://developers.google.com/calendar/api/quickstart/python))
-- Anthropic or OpenAI API key
+- PostgreSQL database
+- Ollama with Mistral model (or OpenAI API key)
+- Google Calendar API credentials
+- Garmin Connect account
 
 ### Installation
 
 ```bash
-# 1. Clone and enter directory
+# Clone repository
+git clone https://github.com/targeted-DK/ai-calendar-agent.git
 cd ai-calendar-agent
 
-# 2. Run setup script (creates venv, installs deps)
-./setup.sh
-
-# OR manually:
+# Create virtual environment
 python3 -m venv venv
 source venv/bin/activate
+
+# Install dependencies
 pip install -r requirements.txt
 
-# 3. Configure environment
+# Configure environment
 cp .env.example .env
-# Edit .env with your API keys
+# Edit .env with your credentials
 
-# 4. Add Google Calendar credentials
-# Download credentials.json from Google Cloud Console
-# Place in project root
+# Initialize database
+python database/init_db.py
 
-# 5. Run the agent
-python main.py
+# Set up Google Calendar (follow prompts)
+python scripts/test_calendar.py
+
+# Install Ollama + Mistral (if using local LLM)
+# See: https://ollama.ai
+ollama pull mistral:7b-instruct-q4_0
+```
+
+### Configuration
+
+Edit `config/goals.yaml` to set your training goals:
+
+```yaml
+weekly_structure:
+  swim_sessions: 0
+  bike_sessions: 2
+  run_sessions: 2
+  strength_sessions: 3
+
+preferences:
+  preferred_workout_time: "flexible"  # morning, evening, or flexible
+  morning_hours: [5, 8]
+  evening_hours: [17, 20]
+```
+
+### Running
+
+```bash
+# Manual run (preview)
+python scripts/plan_workouts.py --days=5 --dry-run
+
+# Manual run (create workouts)
+python scripts/plan_workouts.py --days=5
+
+# Set up cron (every 30 minutes)
+crontab -e
+# Add: */30 * * * * cd /path/to/ai-calendar-agent && ./scripts/run_import.sh
 ```
 
 ---
 
-## 🔑 Required API Keys
-
-Add these to your `.env` file:
+## Environment Variables
 
 ```bash
-# LLM Provider (choose one or more)
-ANTHROPIC_API_KEY=sk-ant-...           # Claude (recommended)
-OPENAI_API_KEY=sk-...                  # GPT-4 + embeddings
+# Database
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_DB=calendar_agent
+POSTGRES_USER=your_user
+POSTGRES_PASSWORD=your_password
+
+# LLM Provider
+LLM_PROVIDER=ollama              # but this is up to the user's preference
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=mistral:7b-instruct-q4_0
 
 # Google Calendar
 GOOGLE_CALENDAR_CREDENTIALS_PATH=credentials.json
 GOOGLE_CALENDAR_TOKEN_PATH=token.json
 
-# Database (optional - defaults shown)
-CHROMADB_PATH=./chroma_db
+# Garmin
+GARMIN_EMAIL=your_email
+GARMIN_PASSWORD=your_password
+
+# Timezone
+USER_TIMEZONE=America/Chicago
 ```
 
 ---
 
-## 💡 Usage Examples
+## How It Works
 
-### Interactive CLI
+### 1. Health Data Collection
+Every 30 minutes, the system imports from Garmin:
+- Sleep duration and quality
+- Recovery score (Body Battery)
+- Stress levels
+- Completed activities
+
+### 2. Workout Planning
+The LLM receives:
+- Your training goals (from config)
+- Current health metrics (from Garmin)
+- Calendar events (from Google Calendar)
+- Recent workout history
+- Detailed workout templates
+
+Then generates a personalized workout with:
+- Specific exercises, sets, reps, weights
+- Target heart rate zones
+- Warmup and cooldown routines
+- Backup plan for low-energy days
+
+### 3. Active Rescheduling
+The system continuously monitors for:
+- Config changes (removed swim? → delete swim workouts)
+- Calendar conflicts (new meeting? → move workout to evening)
+- Health changes (poor sleep? → suggest backup plan)
+- Exceeded targets (3 runs done? → don't schedule 4th)
+
+### 4. Reconciliation
+After workouts, the system:
+- Compares what was planned vs what Garmin recorded
+- Updates calendar events with actual data
+- Logs discrepancies for pattern learning
+
+---
+
+## Testing
+
 ```bash
-python main.py
+# Run regression tests
+pytest tests/ -v
+
+# Run specific test file
+pytest tests/test_workout_functions.py -v
 ```
 
-Menu options:
-1. Schedule event using natural language
-2. Find available time slots
-3. View upcoming events
-4. Analyze calendar patterns
-5. Get scheduling recommendations
-6. Learn from calendar history
-7. Chat with scheduler agent
-
-### Programmatic Usage
-```python
-from agents.scheduler_agent import SchedulerAgent
-
-agent = SchedulerAgent()
-
-# Schedule event
-agent.schedule_event(
-    "Schedule a 1-hour team meeting tomorrow at 2pm"
-)
-
-# Find optimal time
-agent.find_time_for_meeting(
-    duration_minutes=60,
-    preferred_times=["morning"]
-)
-
-# Analyze patterns
-agent.analyze_calendar_patterns(days=30)
-```
+Tests cover:
+- Workout response sanitization
+- Time overlap detection
+- Conflict finding
+- Workout type matching
+- Health adaptation thresholds
 
 ---
 
-## 📚 Documentation
+## Tech Stack
 
-**For developers and learners:**
-- `docs/COMPLETE_MENTAL_MODEL.md` - Understand all concepts (agents, tools, MCP, etc.)
-- `docs/LIFE_OPTIMIZATION_DESIGN.md` - Full system architecture design
-- `docs/PRACTICAL_DEPLOYMENT_FAQ.md` - Deployment questions answered
-- `docs/PROJECT_CONTEXT.md` - Project overview and status
-
----
-
-## 🛠️ Tech Stack
-
-- **Python 3.9+**
-- **LLMs:** Anthropic Claude, OpenAI GPT-4, Google Gemini, Ollama
-- **Vector DB:** ChromaDB (for RAG)
-- **Database:** PostgreSQL (planned) or SQLite
-- **APIs:** Google Calendar API (OAuth 2.0)
-- **Future:** Garmin Connect API, Strava API
+- **Python 3.11**
+- **PostgreSQL** - Health metrics and activity storage
+- **Ollama + Mistral 7B** - Local LLM for workout generation
+- **Google Calendar API** - Schedule management
+- **Garmin Connect API** - Health and fitness data
+- **GitHub Actions** - CI/CD pipeline
+- **pytest** - Regression testing
 
 ---
 
-## 🎯 Roadmap
-
-### Phase 1: MVP (Current)
-- [x] Basic agent architecture
-- [x] Google Calendar integration
-- [x] Simple scheduling via CLI
-- [ ] Test with real calendar data
-
-### Phase 2: Health Integration
-- [ ] Garmin Connect integration (sleep, HR, stress)
-- [ ] Strava integration (workouts, training load)
-- [ ] HealthMonitorAgent implementation
-- [ ] Basic autonomous optimization
-
-### Phase 3: Intelligence
-- [ ] ProductivityAnalyzerAgent (calendar pattern analysis)
-- [ ] PatternLearningAgent enhancements
-- [ ] Multi-factor decision making
-- [ ] Edge case detection
-
-### Phase 4: Automation
-- [ ] Observer mode → Semi-autonomous → Fully autonomous
-- [ ] Safety rules engine
-- [ ] Notification system (Telegram/email)
-- [ ] Rollback/undo capability
-
-### Phase 5: Production
-- [ ] Raspberry Pi deployment
-- [ ] 24/7 operation
-- [ ] Web dashboard
-- [ ] Monitoring and logging
-
----
-
-## 🤝 Contributing
-
-This is a personal learning project, but feedback and suggestions are welcome!
-
----
-
-## 📄 License
+## License
 
 MIT License - See LICENSE file for details
-
----
-
-## 🙋 Questions?
-
-Read the comprehensive guides in `docs/`:
-- New to AI agents? Read `COMPLETE_MENTAL_MODEL.md`
-- Want to understand the architecture? Read `LIFE_OPTIMIZATION_DESIGN.md`
-- Deployment questions? Read `PRACTICAL_DEPLOYMENT_FAQ.md`
