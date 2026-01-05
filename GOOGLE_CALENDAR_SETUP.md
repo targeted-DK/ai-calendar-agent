@@ -33,7 +33,7 @@
 ### 4. Authenticate
 
 ```bash
-cd /home/targeteer/ai-calendar-agent
+cd /home/username/ai-calendar-agent
 source venv/bin/activate
 python -c "from integrations.google_calendar import GoogleCalendarClient; GoogleCalendarClient(); print('Connected!')"
 ```

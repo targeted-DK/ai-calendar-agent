@@ -75,12 +75,26 @@ def get_scheduled_workouts(calendar: GoogleCalendarClient, days_back: int = 7) -
     workouts = []
     for event in events:
         summary = event.get('summary', '')
-        if summary.lower().startswith('workout:'):
+        # Match both "Workout:" and "🅰️ Workout:" / "🅱️ Workout:" formats
+        if 'workout:' in summary.lower():
             start_time = event.get('start', {}).get('dateTime', event.get('start', {}).get('date', ''))
+
+            # Extract option label (A, B, or None)
+            option = None
+            if '🅰️' in summary:
+                option = 'A'
+            elif '🅱️' in summary:
+                option = 'B'
+
+            # Extract workout type (after "Workout:")
+            clean_title = summary.replace('🅰️', '').replace('🅱️', '').strip()
+            planned_type = clean_title.replace('Workout:', '').strip().split()[0]
+
             workouts.append({
                 'id': event.get('id'),
                 'title': summary,
-                'planned_type': summary.replace('Workout:', '').strip().split()[0],  # First word after "Workout:"
+                'planned_type': planned_type,
+                'option': option,
                 'start_time': start_time,
                 'date': start_time[:10] if start_time else None,
                 'description': event.get('description', ''),
