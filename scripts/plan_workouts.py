@@ -352,7 +352,16 @@ RUN EXAMPLE:
 {templates.get('format_instructions', '')}
 
 === YOUR TASK ===
-Plan a workout for {target_date} ({target_date.strftime('%A')}).
+Plan TWO DIFFERENT workout options for {target_date} ({target_date.strftime('%A')}).
+
+Give the user flexibility - they may not be able to do their preferred workout due to:
+- Weather (can't run outside if raining)
+- Equipment (bike broken, gym closed)
+- Time constraints (gym farther than running trail)
+- Social (gym workout with friend vs solo run)
+
+CRITICAL: The two options MUST be different workout TYPES (e.g., Run + Strength, Bike + Yoga).
+Same type with different intensity is NOT acceptable.
 
 Consider:
 1. Recovery score and whether to go hard or easy
@@ -367,26 +376,40 @@ Respond in this exact JSON format. All workout fields must be PLAIN TEXT strings
 {{
     "should_workout": true,
     "reason_if_skip": "",
-    "workout": {{
+    "option_a": {{
         "type": "Run",
         "title": "Easy Zone 2 Run",
         "duration_minutes": 45,
         "intensity": "easy",
         "time_suggestion": "6:30 AM",
         "warmup": "5 min brisk walk, then dynamic stretches: leg swings (10 each leg), high knees (20), butt kicks (20). 2 min very easy jog.",
-        "main_workout": "30-40 min easy running at conversational pace. Target HR: Zone 2 (130-145 bpm). Cadence: 170-180 spm. Stay on flat terrain. Focus on relaxed shoulders and steady breathing.",
+        "main_workout": "30-40 min easy running at conversational pace. Target HR: Zone 2 (130-145 bpm). Cadence: 170-180 spm. Stay on flat terrain.",
         "cooldown": "3 min walk, then static stretches: quads, hamstrings, calves (30 sec each side).",
-        "backup_plan": "If low energy: reduce to 20 min easy jog, or substitute with 30 min brisk walk. Minimum: 15 min movement.",
+        "backup_plan": "If low energy: reduce to 20 min easy jog, or substitute with 30 min brisk walk.",
         "target_hr_zone": "Zone 2 (130-145 bpm)",
-        "why_this_workout": "Easy run to build aerobic base while allowing recovery. Zone 2 work improves fat oxidation and endurance without taxing the body."
+        "why_this_workout": "Easy run to build aerobic base while allowing recovery."
+    }},
+    "option_b": {{
+        "type": "Strength",
+        "title": "Upper Body Push",
+        "duration_minutes": 50,
+        "intensity": "moderate",
+        "time_suggestion": "6:30 AM",
+        "warmup": "5 min light cardio (jumping jacks, arm circles), then band pull-aparts and wall slides.",
+        "main_workout": "Bench Press 4x8 @70%, Overhead Press 3x10, Incline DB Press 3x12, Tricep Dips 3x12, Face Pulls 3x15.",
+        "cooldown": "Chest and shoulder stretches, foam roll upper back.",
+        "backup_plan": "If low energy: reduce to 3 sets each, drop weight by 10%.",
+        "target_hr_zone": "N/A - strength training",
+        "why_this_workout": "Upper body push day to build pressing strength and chest development."
     }}
 }}
 
 IMPORTANT:
+- Both options MUST use the SAME time_suggestion (they overlap - user picks one)
+- option_a and option_b MUST be DIFFERENT workout types
 - All fields must be plain text strings, NOT objects or arrays
 - Write workout details as readable sentences, not structured data
 - Include specific numbers (sets, reps, weights, distances, times, HR zones)
-- The workout should read like instructions a person can follow
 
 Only respond with the JSON, no other text.
 """
@@ -445,18 +468,9 @@ def call_llm(prompt: str) -> Dict:
         return None
 
 
-def sanitize_workout_response(response: Dict, target_date: date) -> Dict:
-    """Validate and sanitize LLM workout response."""
-    if not response:
-        return None
-
+def _sanitize_single_workout(workout: Dict, label: str) -> Tuple[Dict, List[str]]:
+    """Sanitize a single workout option. Returns (sanitized_workout, issues)."""
     issues = []
-
-    # Check required fields
-    workout = response.get('workout', {})
-    if not workout:
-        logger.warning("Sanitizer: No workout object in response")
-        return None
 
     # Validate and fix time
     time_str = workout.get('time_suggestion', '6:30 AM')
@@ -486,10 +500,10 @@ def sanitize_workout_response(response: Dict, target_date: date) -> Dict:
 
         # Validate hour is reasonable (5 AM - 9 PM)
         if hour < 5:
-            issues.append(f"Time too early ({time_str}), adjusting to 6:00 AM")
+            issues.append(f"[{label}] Time too early ({time_str}), adjusting to 6:00 AM")
             workout['time_suggestion'] = '6:00 AM'
         elif hour > 21:
-            issues.append(f"Time too late ({time_str}), adjusting to 6:00 PM")
+            issues.append(f"[{label}] Time too late ({time_str}), adjusting to 6:00 PM")
             workout['time_suggestion'] = '6:00 PM'
         else:
             # Convert to AM/PM format for consistency
@@ -500,7 +514,7 @@ def sanitize_workout_response(response: Dict, target_date: date) -> Dict:
             else:
                 workout['time_suggestion'] = f"{hour - 12}:{minute:02d} PM"
     except:
-        issues.append(f"Invalid time format ({time_str}), defaulting to 6:30 AM")
+        issues.append(f"[{label}] Invalid time format ({time_str}), defaulting to 6:30 AM")
         workout['time_suggestion'] = '6:30 AM'
 
     # Validate duration (15-180 minutes)
@@ -508,47 +522,99 @@ def sanitize_workout_response(response: Dict, target_date: date) -> Dict:
     try:
         duration = int(duration)
         if duration < 15:
-            issues.append(f"Duration too short ({duration} min), adjusting to 20 min")
+            issues.append(f"[{label}] Duration too short ({duration} min), adjusting to 20 min")
             workout['duration_minutes'] = 20
         elif duration > 180:
-            issues.append(f"Duration too long ({duration} min), adjusting to 90 min")
+            issues.append(f"[{label}] Duration too long ({duration} min), adjusting to 90 min")
             workout['duration_minutes'] = 90
     except:
-        issues.append(f"Invalid duration, defaulting to 45 min")
+        issues.append(f"[{label}] Invalid duration, defaulting to 45 min")
         workout['duration_minutes'] = 45
 
     # Validate workout type
     valid_types = ['run', 'bike', 'swim', 'strength', 'rest', 'yoga', 'walk', 'hike']
     workout_type = workout.get('type', '').lower()
     if not any(t in workout_type for t in valid_types):
-        issues.append(f"Unknown workout type ({workout_type})")
+        issues.append(f"[{label}] Unknown workout type ({workout_type})")
 
     # Ensure required text fields exist
     if not workout.get('warmup'):
         workout['warmup'] = 'Light movement for 5-10 minutes'
-        issues.append("Missing warmup, added default")
+        issues.append(f"[{label}] Missing warmup, added default")
 
     if not workout.get('main_workout'):
         workout['main_workout'] = 'Complete planned workout'
-        issues.append("Missing main_workout description")
+        issues.append(f"[{label}] Missing main_workout description")
 
     if not workout.get('cooldown'):
         workout['cooldown'] = 'Stretch and recover for 5 minutes'
-        issues.append("Missing cooldown, added default")
+        issues.append(f"[{label}] Missing cooldown, added default")
 
     if not workout.get('backup_plan'):
         workout['backup_plan'] = 'Reduce intensity/duration by 50%, or substitute with easy walk'
-        issues.append("Missing backup_plan, added default")
+        issues.append(f"[{label}] Missing backup_plan, added default")
+
+    return workout, issues
+
+
+def sanitize_workout_response(response: Dict, target_date: date) -> Dict:
+    """Validate and sanitize LLM workout response with dual options."""
+    if not response:
+        return None
+
+    all_issues = []
+
+    # Check for dual options (new format) or single workout (old format)
+    option_a = response.get('option_a', {})
+    option_b = response.get('option_b', {})
+
+    # Backward compatibility: if old format with single 'workout', convert
+    if not option_a and not option_b and response.get('workout'):
+        logger.info("Sanitizer: Converting single workout to dual format")
+        option_a = response.get('workout')
+        # Create option_b as a copy (user will get same workout twice - fallback)
+        option_b = dict(option_a)
+        all_issues.append("LLM returned single workout, duplicated as both options")
+
+    if not option_a:
+        logger.warning("Sanitizer: No option_a in response")
+        return None
+
+    if not option_b:
+        logger.warning("Sanitizer: No option_b in response, duplicating option_a")
+        option_b = dict(option_a)
+        all_issues.append("Missing option_b, duplicated option_a")
+
+    # Sanitize both options
+    option_a, issues_a = _sanitize_single_workout(option_a, "A")
+    option_b, issues_b = _sanitize_single_workout(option_b, "B")
+    all_issues.extend(issues_a)
+    all_issues.extend(issues_b)
+
+    # Ensure both options use the same time (they should overlap)
+    if option_a.get('time_suggestion') != option_b.get('time_suggestion'):
+        logger.info(f"Syncing times: A={option_a.get('time_suggestion')}, B={option_b.get('time_suggestion')}")
+        # Use option_a's time for both
+        option_b['time_suggestion'] = option_a.get('time_suggestion')
+        all_issues.append("Synced option_b time to match option_a")
+
+    # Warn if both options are same type
+    type_a = option_a.get('type', '').lower()
+    type_b = option_b.get('type', '').lower()
+    if extract_workout_type(type_a) == extract_workout_type(type_b):
+        all_issues.append(f"WARNING: Both options are same type ({type_a})")
+        logger.warning(f"Both workout options are same type: {type_a}")
 
     # Log issues
-    if issues:
-        logger.warning(f"Sanitizer fixed {len(issues)} issues:")
-        for issue in issues:
+    if all_issues:
+        logger.warning(f"Sanitizer fixed {len(all_issues)} issues:")
+        for issue in all_issues:
             logger.warning(f"  - {issue}")
 
-    response['workout'] = workout
+    response['option_a'] = option_a
+    response['option_b'] = option_b
     response['_sanitized'] = True
-    response['_issues'] = issues
+    response['_issues'] = all_issues
 
     return response
 
@@ -557,9 +623,14 @@ def create_workout_event(
     calendar: GoogleCalendarClient,
     target_date: date,
     workout: Dict,
-    dry_run: bool = False
+    dry_run: bool = False,
+    option_label: str = None
 ) -> Optional[Dict]:
-    """Create workout event in Google Calendar."""
+    """Create workout event in Google Calendar.
+
+    Args:
+        option_label: "A" or "B" for dual workout options, None for single workout
+    """
 
     # Parse suggested time
     time_str = workout.get('time_suggestion', '6:30 AM')
@@ -582,8 +653,16 @@ def create_workout_event(
     duration = workout.get('duration_minutes', 45)
     end = start + timedelta(minutes=duration)
 
-    # Build description
-    title = f"Workout: {workout.get('title', workout.get('type', 'Training'))}"
+    # Build title with option label
+    workout_title = workout.get('title', workout.get('type', 'Training'))
+    if option_label:
+        label_emoji = "🅰️" if option_label == "A" else "🅱️"
+        title = f"{label_emoji} Workout: {workout_title}"
+        other_label = "B" if option_label == "A" else "A"
+        choice_note = f"\n\n🔄 This is Option {option_label}. Delete this event if you're doing Option {other_label} instead."
+    else:
+        title = f"Workout: {workout_title}"
+        choice_note = ""
 
     backup_plan = workout.get('backup_plan', '')
     backup_section = f"\n⚡ BACKUP PLAN (low energy day):\n{backup_plan}\n" if backup_plan else ""
@@ -604,7 +683,7 @@ def create_workout_event(
 {backup_section}
 💡 WHY THIS WORKOUT:
 {workout.get('why_this_workout', 'Scheduled based on your training plan')}
-
+{choice_note}
 ---
 Auto-scheduled by AI Calendar Agent
 Based on recovery score, calendar, and training goals
@@ -655,27 +734,42 @@ def extract_workout_type(title: str) -> str:
     return title.replace('Workout:', '').strip().split()[0].lower()
 
 
-def get_existing_workout(calendar: GoogleCalendarClient, target_date: date) -> Optional[Dict]:
-    """Get existing workout for a date (if any)."""
+def get_existing_workouts(calendar: GoogleCalendarClient, target_date: date) -> List[Dict]:
+    """Get all existing workouts for a date (including A/B options)."""
     day_start = datetime.combine(target_date, datetime.min.time(), tzinfo=USER_TIMEZONE)
     day_end = day_start + timedelta(days=1)
 
+    workouts = []
     try:
         events = calendar.get_events(day_start, day_end)
         for event in events:
             summary = event.get('summary', '')
-            if summary.lower().startswith('workout:'):
+            # Match both "Workout:" and "🅰️ Workout:" / "🅱️ Workout:" formats
+            if 'workout:' in summary.lower():
                 workout_type = extract_workout_type(summary)
-                return {
+                option = None
+                if '🅰️' in summary:
+                    option = 'A'
+                elif '🅱️' in summary:
+                    option = 'B'
+                workouts.append({
                     'id': event.get('id'),
                     'title': summary,
                     'type': workout_type,
+                    'option': option,
                     'start': event.get('start', {}).get('dateTime', ''),
-                }
-        logger.info(f"No existing workout on {target_date}")
+                })
+        if not workouts:
+            logger.info(f"No existing workout on {target_date}")
     except Exception as e:
         logger.warning(f"Error checking workouts for {target_date}: {e}")
-    return None
+    return workouts
+
+
+def get_existing_workout(calendar: GoogleCalendarClient, target_date: date) -> Optional[Dict]:
+    """Get existing workout for a date (backward compat - returns first found)."""
+    workouts = get_existing_workouts(calendar, target_date)
+    return workouts[0] if workouts else None
 
 
 def delete_workout(calendar: GoogleCalendarClient, event_id: str, reason: str, dry_run: bool = False) -> bool:
@@ -795,20 +889,22 @@ def plan_workouts(days_ahead: int = 3, dry_run: bool = False) -> Dict:
         target_date = (datetime.now(USER_TIMEZONE) + timedelta(days=i)).date()
         logger.info(f"\n--- {target_date} ({target_date.strftime('%A')}) ---")
 
-        # Check for existing workout
-        existing = get_existing_workout(calendar, target_date)
-        if existing:
-            logger.info(f"Found existing: {existing['title']}")
+        # Check for existing workouts (may have both A and B options)
+        existing_workouts = get_existing_workouts(calendar, target_date)
+        if existing_workouts:
+            logger.info(f"Found {len(existing_workouts)} existing workout(s): {[w['title'] for w in existing_workouts]}")
 
-            # Check if it should be rescheduled based on current state
-            needs_reschedule, reason = should_reschedule(existing, goals, week_progress)
+            # Check if any should be rescheduled
+            all_valid = True
+            for existing in existing_workouts:
+                needs_reschedule, reason = should_reschedule(existing, goals, week_progress)
+                if needs_reschedule:
+                    logger.info(f"RESCHEDULING: {reason}")
+                    delete_workout(calendar, existing['id'], reason, dry_run)
+                    all_valid = False
 
-            if needs_reschedule:
-                logger.info(f"RESCHEDULING: {reason}")
-                delete_workout(calendar, existing['id'], reason, dry_run)
-                # Continue to create new workout below
-            else:
-                logger.info("Existing workout still valid, keeping")
+            if all_valid:
+                logger.info("Existing workout(s) still valid, keeping")
                 results.append({'date': str(target_date), 'status': 'already_scheduled'})
                 continue
 
@@ -846,28 +942,36 @@ def plan_workouts(days_ahead: int = 3, dry_run: bool = False) -> Dict:
             results.append({'date': str(target_date), 'status': 'rest_day', 'reason': reason})
             continue
 
-        workout = llm_response.get('workout', {})
-        logger.info(f"LLM recommends: {workout.get('type')} - {workout.get('title')}")
+        # Get both workout options
+        option_a = llm_response.get('option_a', {})
+        option_b = llm_response.get('option_b', {})
 
-        # Create event
-        event = create_workout_event(calendar, target_date, workout, dry_run)
+        logger.info(f"LLM recommends:")
+        logger.info(f"  Option A: {option_a.get('type')} - {option_a.get('title')}")
+        logger.info(f"  Option B: {option_b.get('type')} - {option_b.get('title')}")
 
-        if event:
+        # Create both events (overlapping - user picks one)
+        event_a = create_workout_event(calendar, target_date, option_a, dry_run, option_label="A")
+        event_b = create_workout_event(calendar, target_date, option_b, dry_run, option_label="B")
+
+        if event_a or event_b:
             results.append({
                 'date': str(target_date),
                 'status': 'created' if not dry_run else 'dry_run',
-                'workout': workout
+                'option_a': option_a,
+                'option_b': option_b,
             })
 
-            # Track this workout for next iteration (avoid data race)
+            # Track both workouts for next iteration (count as ONE workout slot)
             created_this_run.append({
                 'date': str(target_date),
-                'type': workout.get('type', 'Unknown'),
-                'title': workout.get('title', 'Workout'),
+                'type': f"{option_a.get('type', 'Unknown')} OR {option_b.get('type', 'Unknown')}",
+                'title': f"Option A: {option_a.get('title', 'Workout')} | Option B: {option_b.get('title', 'Workout')}",
             })
 
-            # Update week progress for next iteration
-            wtype = workout.get('type', '').lower()
+            # Update week progress - count as ONE workout (user will do one, not both)
+            # Use option_a's type for counting since it's the "primary" recommendation
+            wtype = option_a.get('type', '').lower()
             if 'run' in wtype:
                 week_progress['completed']['runs'] = week_progress['completed'].get('runs', 0) + 1
             elif 'bike' in wtype or 'cycling' in wtype:
