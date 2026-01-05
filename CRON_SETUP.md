@@ -1,11 +1,12 @@
-# Simple Cron Setup - Auto Import Garmin Data
+# Simple Cron Setup - Auto Import Data
 
 ## What It Does
 
-Automatically imports Garmin health data and activities **every 30 minutes**.
+Automatically imports Garmin health data and Google Calendar events **every 30 minutes**.
 
-- ✅ Imports sleep, recovery, stress data
-- ✅ Imports workouts, runs, activities
+- ✅ Imports sleep, recovery, stress data from Garmin
+- ✅ Imports workouts, runs, activities from Garmin
+- ✅ Imports Google Calendar events (past 7 days, future 90 days)
 - ✅ Skips duplicates cleanly (no errors)
 - ✅ Logs everything to `logs/import.log`
 
@@ -72,9 +73,10 @@ bash /home/targeteer/ai-calendar-agent/scripts/run_import.sh
 
 ```
 ============================================================
-Garmin Data Import
+Data Import - Sun Jan 4 21:47:39 CST 2026
 ============================================================
 
+📊 Importing Garmin health data...
 🔌 Connecting to Garmin...
 ✅ Connected to Garmin Connect
 
@@ -91,6 +93,31 @@ Import Summary
 ✅ Success: 2
 ⏭️  Skipped: 4 (already in database)
 ❌ Errors:  0
+============================================================
+
+📅 Importing Google Calendar events...
+🔌 Connecting to Google Calendar...
+✅ Connected to Google Calendar
+
+📅 Fetching events from 2025-12-29 to 2026-04-05...
+Found 5 events
+
+  ✅ Team Meeting
+     2026-01-05 14:00
+  ✅ Focus Time
+     2026-01-06 09:00
+
+============================================================
+Import Summary
+============================================================
+✅ New events:     5
+🔄 Updated events: 0
+❌ Errors:         0
+📊 Total:          5
+============================================================
+
+============================================================
+Import completed - Sun Jan 4 21:47:45 CST 2026
 ============================================================
 ```
 

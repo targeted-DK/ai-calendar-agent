@@ -1,0 +1,168 @@
+# Training Goals Configuration
+# Edit this file to update your long-term training focus
+
+# =============================================================================
+# PRIMARY GOAL
+# =============================================================================
+primary_goal:
+  type: "ironman"
+  title: "Ironman Triathlon"
+  target_date: null                    # Set when you register for an event
+  description: "Complete an Ironman (2.4mi swim, 112mi bike, 26.2mi run)"
+
+  # Ironman distances
+  distances:
+    swim_miles: 2.4
+    bike_miles: 112
+    run_miles: 26.2
+
+# =============================================================================
+# SECONDARY GOAL (Hybrid Training)
+# =============================================================================
+secondary_goal:
+  type: "muscle_building"
+  title: "Increase Muscle Mass"
+  description: "Build strength and muscle while maintaining endurance base"
+  focus_areas:
+    - "upper body"
+    - "core"
+    - "leg strength for power"
+
+# =============================================================================
+# CURRENT FITNESS LEVEL
+# =============================================================================
+fitness_level:
+  swimming: "beginner"                 # beginner, intermediate, advanced
+  cycling: "intermediate"
+  running: "intermediate"
+  strength: "beginner"
+  notes: "Comfortable with 10K runs and 30-mile bike rides"
+
+# =============================================================================
+# TRAINING PHASE
+# =============================================================================
+# Phases: base, build, peak, taper, recovery, off-season
+current_phase: "base"
+
+phase_descriptions:
+  base: "Build aerobic foundation, establish strength routine"
+  build: "Increase volume and intensity, progressive overload"
+  peak: "Race-specific workouts, maintain strength"
+  taper: "Reduce volume, maintain intensity, fresh for race"
+  recovery: "Active recovery, address weaknesses"
+
+# =============================================================================
+# WEEKLY STRUCTURE (Hybrid: Endurance + Strength)
+# =============================================================================
+weekly_structure:
+  # Endurance (Ironman prep)
+  swim_sessions: 2
+  bike_sessions: 2
+  run_sessions: 3
+
+  # Strength (Muscle building)
+  strength_sessions: 3                 # Full body or push/pull/legs
+
+  # Recovery
+  rest_days: 1
+
+  # Typical week layout
+  example_week:
+    monday: "Strength (Push) + Easy Run"
+    tuesday: "Swim + Bike"
+    wednesday: "Strength (Pull) + Recovery"
+    thursday: "Run (Quality) + Swim"
+    friday: "Strength (Legs)"
+    saturday: "Long Bike or Long Run (alternate)"
+    sunday: "Rest or Active Recovery"
+
+# =============================================================================
+# HYBRID TRAINING RULES
+# =============================================================================
+hybrid_rules:
+  # Rules to prevent interference between cardio and strength
+  rules:
+    - "Separate hard cardio and heavy strength by 6+ hours when possible"
+    - "Do strength before cardio if same session"
+    - "Prioritize protein intake post-strength (within 2 hours)"
+    - "Don't do heavy leg strength day before long run/bike"
+    - "Keep easy days easy - don't stack hard sessions"
+
+  # Balance priorities
+  strength_priority: 0.4               # 40% focus
+  endurance_priority: 0.6              # 60% focus
+
+  # Recovery needs for hybrid
+  min_sleep_hours: 7.5
+  recovery_threshold: 55               # Below this, reduce intensity
+
+# =============================================================================
+# PREFERENCES
+# =============================================================================
+preferences:
+  preferred_workout_time: "morning"    # morning, afternoon, evening
+  morning_hours: [6, 9]                # 6 AM - 9 AM
+  max_workout_minutes: 120             # Cap single session
+
+  # Days to avoid hard training
+  avoid_hard_on: []                    # e.g., ["monday"] if busy
+
+  # Preferred workout types
+  favorite_workouts:
+    - "cycling"
+    - "strength training"
+
+  least_favorite:
+    - "swimming"                       # Will still do, but less preferred
+
+# =============================================================================
+# CURRENT WEEKLY TARGETS
+# =============================================================================
+weekly_targets:
+  total_training_hours: 10             # Hours per week
+  swim_distance_yards: 4000            # ~2 sessions
+  bike_distance_miles: 60              # ~2 sessions
+  run_distance_miles: 15               # ~3 sessions
+  strength_sessions: 3
+
+# =============================================================================
+# MANUAL CONTEXT (Update this as needed!)
+# =============================================================================
+# This is where YOU tell the app things it can't know from sensors
+
+current_notes: |
+  Starting fresh with hybrid training.
+  Want to build base fitness before committing to a specific race.
+
+# Life circumstances affecting training
+life_context:
+  work_intensity: "normal"             # light, normal, heavy, crazy
+  stress_factors: []                   # e.g., ["big project deadline", "moving"]
+  sleep_quality_note: ""               # e.g., "baby waking up at night"
+
+# Upcoming events/races (app will adjust training around these)
+upcoming_events: []
+  # Example:
+  # - date: "2026-06-15"
+  #   event: "Local Sprint Triathlon"
+  #   priority: "A"                    # A=peak for it, B=do well, C=just finish
+  #   note: "First tri, just want to finish"
+
+# Current injuries or limitations
+injuries: []
+  # Example:
+  # - area: "left knee"
+  #   status: "minor soreness"
+  #   started: "2026-01-01"
+  #   avoid: ["long runs", "hill repeats", "jumping"]
+  #   prefer: ["cycling", "swimming", "elliptical"]
+
+# Things you want to focus on improving
+focus_areas:
+  - "swimming technique"               # Weakest Ironman discipline
+  - "upper body strength"
+
+# Things to avoid or reduce
+avoid:
+  - "back-to-back hard days"
+  - "running more than 3 days in a row"

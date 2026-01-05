@@ -65,14 +65,23 @@ class GoogleCalendarClient:
         """
         try:
             if time_min is None:
-                time_min = datetime.datetime.utcnow()
+                time_min = datetime.datetime.now(datetime.timezone.utc)
             if time_max is None:
                 time_max = time_min + datetime.timedelta(days=30)
 
+            # Format datetime for API - handle both timezone-aware and naive
+            def format_datetime(dt):
+                if dt.tzinfo is None:
+                    # Naive datetime - assume UTC and add Z
+                    return dt.isoformat() + 'Z'
+                else:
+                    # Timezone-aware - convert to UTC and use RFC3339 format
+                    return dt.isoformat().replace('+00:00', 'Z')
+
             events_result = self.service.events().list(
                 calendarId='primary',
-                timeMin=time_min.isoformat() + 'Z',
-                timeMax=time_max.isoformat() + 'Z',
+                timeMin=format_datetime(time_min),
+                timeMax=format_datetime(time_max),
                 maxResults=max_results,
                 singleEvents=True,
                 orderBy='startTime'
@@ -219,9 +228,16 @@ class GoogleCalendarClient:
             List of busy time blocks
         """
         try:
+            # Format datetime for API - handle both timezone-aware and naive
+            def format_datetime(dt):
+                if dt.tzinfo is None:
+                    return dt.isoformat() + 'Z'
+                else:
+                    return dt.isoformat().replace('+00:00', 'Z')
+
             body = {
-                "timeMin": time_min.isoformat() + 'Z',
-                "timeMax": time_max.isoformat() + 'Z',
+                "timeMin": format_datetime(time_min),
+                "timeMax": format_datetime(time_max),
                 "items": [{"id": "primary"}]
             }
 
