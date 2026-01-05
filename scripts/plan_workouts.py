@@ -106,11 +106,12 @@ def get_recent_workouts(garmin: GarminConnector, days: int = 7) -> List[Dict]:
     try:
         activities = garmin.get_activities(limit=20)
         for activity in activities[:10]:
+            # Garmin connector returns processed data with flat keys
             workouts.append({
-                'type': activity.get('activityType', {}).get('typeKey', 'unknown'),
-                'date': activity.get('startTimeLocal', '')[:10],
-                'duration_min': round(activity.get('duration', 0) / 60),
-                'calories': activity.get('calories', 0),
+                'type': activity.get('activity_type', 'unknown'),
+                'date': activity.get('timestamp', '')[:10],
+                'duration_min': round(activity.get('duration_minutes', 0)),
+                'calories': activity.get('calories_burned', 0),
             })
     except Exception as e:
         logger.warning(f"Could not get workout history: {e}")
@@ -191,6 +192,25 @@ def count_scheduled_workouts(existing_workouts: List[Dict]) -> Dict:
             counts['strength'] += 1
 
     return counts
+
+
+def _format_scheduled_counts(scheduled: Dict, targets: Dict) -> str:
+    """Format scheduled counts with warnings for over-scheduling."""
+    lines = []
+    for workout_type in ['runs', 'bike', 'swim', 'strength']:
+        count = scheduled.get(workout_type, 0)
+        target = targets.get(workout_type, 0)
+        status = ""
+        if target == 0:
+            status = "(not in plan)"
+        elif count >= target:
+            status = "⚠️ AT/OVER TARGET - DO NOT ADD MORE!"
+        elif count > 0:
+            status = f"({target - count} more needed)"
+        else:
+            status = f"(need {target})"
+        lines.append(f"- {workout_type.upper()}: {count} scheduled / {target} target {status}")
+    return "\n".join(lines)
 
 
 def get_week_progress(recent_workouts: List[Dict], goals: Dict) -> Dict:
@@ -289,8 +309,11 @@ decrease if hard workout. We don't have future health data - use judgment based 
 {json.dumps(recent_workouts[:7], indent=2) if recent_workouts else 'No recent workouts'}
 
 === THIS WEEK'S PROGRESS ===
-Completed: {json.dumps(week_progress.get('completed', {}), indent=2)}
+Completed (from Garmin): {json.dumps(week_progress.get('completed', {}), indent=2)}
 Targets: {json.dumps(week_progress.get('targets', {}), indent=2)}
+
+=== SCHEDULED WORKOUTS COUNT (CRITICAL!) ===
+{_format_scheduled_counts(count_scheduled_workouts(calendar.get('existing_workouts', [])), week_progress.get('targets', {}))}
 
 === CALENDAR (next 7 days) - IMPORTANT: Avoid scheduling during these times! ===
 {json.dumps(calendar.get('events_by_day', {}), indent=2)}
@@ -301,8 +324,8 @@ Targets: {json.dumps(week_progress.get('targets', {}), indent=2)}
 === WORKOUTS JUST PLANNED IN THIS SESSION (VERY IMPORTANT!) ===
 {chr(10).join(f"- {w['date']}: {w['type']} - {w['title']}" for w in created_this_run) if created_this_run else 'None yet - you are planning the first day'}
 
-CRITICAL: Look at BOTH sections above. Do NOT schedule the same workout type on back-to-back days.
-If yesterday or tomorrow has Strength, schedule Run or Bike today instead. Vary the workout types!
+CRITICAL: Look at SCHEDULED WORKOUTS COUNT above. Do NOT exceed weekly targets!
+If runs are already at target, schedule BIKE or STRENGTH instead. Vary the workout types!
 
 NOTE: Times shown as "HH:MM-HH:MM: Event". Schedule workouts BEFORE or AFTER these busy blocks, not during!
 
