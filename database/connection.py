@@ -198,5 +198,4 @@ def get_upcoming_events(hours: int = 24) -> List[Dict[str, Any]]:
     return Database.execute_query(query, (hours,))
 
 
-# Initialize pool on import
-Database.initialize_pool()
+# Note: Call Database.initialize_pool() explicitly in scripts that need DB access
