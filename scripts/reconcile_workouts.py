@@ -649,7 +649,7 @@ def check_health_adaptation(
     return results
 
 
-def reconcile_workouts(days_back: int = 7, dry_run: bool = False) -> Dict:
+def reconcile_workouts(days_back: int = 7, dry_run: bool = False, force: bool = False) -> Dict:
     """Main reconciliation function."""
     logger.info("=" * 60)
     logger.info(f"WORKOUT RECONCILIATION - {datetime.now().strftime('%Y-%m-%d %H:%M')}")
@@ -690,11 +690,13 @@ def reconcile_workouts(days_back: int = 7, dry_run: bool = False) -> Dict:
     for workout in scheduled:
         logger.info(f"\n--- {workout['date']}: {workout['title']} ---")
 
-        # Skip already reconciled
-        if workout['already_reconciled']:
+        # Skip already reconciled (unless force flag is set)
+        if workout['already_reconciled'] and not force:
             logger.info("Already reconciled, skipping")
             results['already_reconciled'] += 1
             continue
+        elif workout['already_reconciled'] and force:
+            logger.info("Already reconciled, but --force flag set, re-processing")
 
         # Find matching activity
         activity = match_workout_to_activity(workout, activities)
@@ -741,10 +743,11 @@ def main():
     parser = argparse.ArgumentParser(description='Reconcile scheduled vs actual workouts')
     parser.add_argument('--days', type=int, default=7, help='Days to look back/ahead')
     parser.add_argument('--dry-run', action='store_true', help='Preview without updating')
+    parser.add_argument('--force', action='store_true', help='Re-reconcile already processed workouts')
     args = parser.parse_args()
 
     # Part 1: Reconcile past workouts (plan vs actual)
-    result = reconcile_workouts(days_back=args.days, dry_run=args.dry_run)
+    result = reconcile_workouts(days_back=args.days, dry_run=args.dry_run, force=args.force)
 
     # Part 2: Check for future conflicts
     if result.get('success'):
