@@ -895,15 +895,19 @@ def plan_workouts(days_ahead: int = 3, dry_run: bool = False) -> Dict:
             logger.info(f"Found {len(existing_workouts)} existing workout(s): {[w['title'] for w in existing_workouts]}")
 
             # Check if any should be rescheduled
-            all_valid = True
+            any_invalid = False
             for existing in existing_workouts:
                 needs_reschedule, reason = should_reschedule(existing, goals, week_progress)
                 if needs_reschedule:
-                    logger.info(f"RESCHEDULING: {reason}")
-                    delete_workout(calendar, existing['id'], reason, dry_run)
-                    all_valid = False
+                    logger.info(f"NEEDS RESCHEDULE: {reason}")
+                    any_invalid = True
 
-            if all_valid:
+            if any_invalid:
+                # Delete ALL workouts for this day and recreate fresh
+                logger.info("Deleting all workouts for this day to recreate fresh")
+                for existing in existing_workouts:
+                    delete_workout(calendar, existing['id'], "Recreating with fresh options", dry_run)
+            else:
                 logger.info("Existing workout(s) still valid, keeping")
                 results.append({'date': str(target_date), 'status': 'already_scheduled'})
                 continue
