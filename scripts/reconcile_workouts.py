@@ -231,7 +231,7 @@ def update_calendar_event(
     actual_activity: Dict,
     dry_run: bool = False
 ) -> bool:
-    """Update calendar event to reflect actual workout."""
+    """Update calendar event to reflect actual workout (time, title, description)."""
     actual_type = actual_activity.get('type_readable', 'Unknown')
     duration = actual_activity.get('duration_min', 0)
 
@@ -240,6 +240,20 @@ def update_calendar_event(
         new_title = f"Workout: {actual_type} ✓"
     else:
         new_title = f"Workout: {actual_type} ✓ (Planned: {planned_type})"
+
+    # Parse actual start time from Garmin
+    actual_start = None
+    actual_end = None
+    activity_time_str = actual_activity.get('start_time', '')
+    if activity_time_str:
+        try:
+            # Format: "2026-01-04 07:39:06"
+            actual_start = datetime.strptime(activity_time_str, '%Y-%m-%d %H:%M:%S')
+            actual_start = actual_start.replace(tzinfo=USER_TIMEZONE)
+            actual_end = actual_start + timedelta(minutes=duration)
+            logger.info(f"  Moving event to actual time: {actual_start.strftime('%H:%M')}")
+        except Exception as e:
+            logger.warning(f"  Could not parse activity time: {e}")
 
     # Build updated description
     description_update = f"""
@@ -256,13 +270,17 @@ Reconciled: {datetime.now(USER_TIMEZONE).strftime('%Y-%m-%d %H:%M')}
 
     if dry_run:
         logger.info(f"[DRY RUN] Would update event to: {new_title}")
+        if actual_start:
+            logger.info(f"[DRY RUN] Would move to: {actual_start.strftime('%Y-%m-%d %H:%M')}")
         return True
 
     try:
         calendar.update_event(
             event_id=event_id,
             summary=new_title,
-            description=description_update
+            description=description_update,
+            start_time=actual_start,
+            end_time=actual_end
         )
         logger.info(f"Updated event: {new_title}")
         return True
