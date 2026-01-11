@@ -1,0 +1,10 @@
+# AI Calendar Agent - Cron Schedule
+# Runs every 30 minutes
+
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+PYTHONPATH=/app
+
+*/30 * * * * cd /app && python scripts/import_garmin_data.py --days=3 >> /app/logs/cron.log 2>&1 && python scripts/reconcile_workouts.py --days=7 >> /app/logs/cron.log 2>&1 && python scripts/import_calendar_events.py --past 7 --future 90 >> /app/logs/cron.log 2>&1 && python scripts/plan_workouts.py --days=3 >> /app/logs/cron.log 2>&1
+
+# Empty line required at end

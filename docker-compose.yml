@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: calendar-agent-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: calendar_user
+      POSTGRES_PASSWORD: calendar_pass
+      POSTGRES_DB: calendar_agent
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U calendar_user -d calendar_agent"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # AI Calendar Agent Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: calendar-agent-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://calendar_user:calendar_pass@postgres:5432/calendar_agent
+    env_file:
+      - .env
+    volumes:
+      # Mount credentials (read-only)
+      - ./credentials.json:/app/credentials.json:ro
+      # Mount token (read-write, gets updated)
+      - ./token.json:/app/token.json
+      # Mount config files
+      - ./config:/app/config:ro
+      # Persist logs
+      - ./logs:/app/logs
+      # Persist ChromaDB
+      - ./chroma_db:/app/chroma_db
+    command: cron
+
+volumes:
+  postgres_data:
+    name: calendar-agent-postgres-data
