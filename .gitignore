@@ -72,3 +72,5 @@ unused/
 
 # Internal tickets/backlog
 ticket/
+
+backup.sql
