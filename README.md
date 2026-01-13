@@ -2,14 +2,17 @@
 
 **An intelligent workout scheduling system that automatically plans, adjusts, and optimizes your training based on real-time health data and calendar availability.**
 
-Built with Python, integrating Garmin Connect, Google Calendar, and local LLM (Ollama + Mistral) to create a fully autonomous fitness planning system.
+Built with Python, Docker, integrating Garmin Connect, Google Calendar, and LLM (Ollama local or cloud models) to create a fully autonomous fitness planning system.
+
+**Current Version:** v1.1.0
 
 ---
 
 ## Features
 
 ### Intelligent Workout Planning
-- **LLM-powered scheduling** - Uses local Mistral 7B to generate detailed, personalized workout plans
+- **LLM-powered scheduling** - Uses local or cloud LLM models with automatic fallback
+- **Dual workout options** - Generates Option A and Option B for each day (user picks one)
 - **Health-aware decisions** - Adjusts intensity based on recovery score, sleep quality, and stress levels
 - **Calendar-aware** - Automatically avoids scheduling conflicts with work, meetings, and other events
 - **Flexible timing** - Schedules morning workouts by default, falls back to evening if morning is blocked
@@ -36,12 +39,13 @@ Built with Python, integrating Garmin Connect, Google Calendar, and local LLM (O
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│  Garmin Connect │    │ Google Calendar │    │ Ollama+Mistral  │
-│      API        │    │      API        │    │  (Local LLM)    │
+│  Garmin Connect │    │ Google Calendar │    │  Ollama (LLM)   │
+│      API        │    │      API        │    │ Local or Cloud  │
 └────────┬────────┘    └────────┬────────┘    └────────┬────────┘
          │                      │                      │
          ▼                      ▼                      ▼
 ┌─────────────────────────────────────────────────────────────────┐
+│                    Docker Container (App)                       │
 │                        CRON (every 30 min)                      │
 └─────────────────────────────────────────────────────────────────┘
                                  │
@@ -59,7 +63,7 @@ Built with Python, integrating Garmin Connect, Google Calendar, and local LLM (O
          │                      │                      │
          ▼                      ▼                      ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                         PostgreSQL                              │
+│                 Docker Container (PostgreSQL)                   │
 │              (health_metrics, activity_data, patterns)          │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -84,22 +88,27 @@ ai-calendar-agent/
 ├── database/
 │   ├── connection.py         # PostgreSQL connection pool
 │   └── init_db.py           # Schema initialization
+├── docker/
+│   ├── entrypoint.sh        # Docker entrypoint
+│   └── crontab              # Cron schedule
 ├── tests/
 │   └── test_workout_functions.py # Regression tests
 ├── .github/workflows/
 │   └── test.yml              # CI pipeline
+├── version.py                # Version tracking
+├── Dockerfile                # App container
+├── docker-compose.yml        # Full stack orchestration
 └── logs/                     # Runtime logs
 ```
 
 ---
 
-## Quick Start
+## Quick Start (Docker - Recommended)
 
 ### Prerequisites
-- Python 3.9+
-- PostgreSQL database
-- Ollama with Mistral model (or OpenAI API key)
-- Google Calendar API credentials
+- Docker & Docker Compose
+- Ollama (on host machine)
+- Google Calendar API credentials (`credentials.json`)
 - Garmin Connect account
 
 ### Installation
@@ -109,31 +118,116 @@ ai-calendar-agent/
 git clone https://github.com/targeted-DK/ai-calendar-agent.git
 cd ai-calendar-agent
 
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-
 # Configure environment
 cp .env.example .env
 # Edit .env with your credentials
 
+# Set up Google Calendar authentication (one-time)
+pip install google-auth google-auth-oauthlib google-api-python-client
+python -c "
+from google_auth_oauthlib.flow import InstalledAppFlow
+flow = InstalledAppFlow.from_client_secrets_file('credentials.json', ['https://www.googleapis.com/auth/calendar'])
+creds = flow.run_local_server(port=0)
+import json
+with open('token.json', 'w') as f:
+    json.dump({'token': creds.token, 'refresh_token': creds.refresh_token, 'token_uri': creds.token_uri, 'client_id': creds.client_id, 'client_secret': creds.client_secret, 'scopes': creds.scopes}, f)
+"
+
+# Start everything with Docker
+docker compose up -d
+
+# Check logs
+docker compose logs -f app
+```
+
+### Ollama Setup
+
+```bash
+# Install Ollama (on host, not in Docker)
+# See: https://ollama.ai
+
+# For local models:
+ollama pull mistral:7b-instruct-q4_0
+
+# For cloud models (faster, requires sign-in):
+ollama signin
+# Then use gpt-oss:20b-cloud in .env
+```
+
+### Running Manually
+
+```bash
+# Preview workouts (dry run)
+docker compose exec app python scripts/plan_workouts.py --days=3 --dry-run
+
+# Create workouts
+docker compose exec app python scripts/plan_workouts.py --days=3
+
+# Or use aliases (add to ~/.bashrc):
+alias plan="docker compose exec app python scripts/plan_workouts.py"
+alias plan-logs="docker compose logs -f app"
+
+# Then just:
+plan --dry-run
+plan --days=5
+```
+
+---
+
+## Quick Start (Without Docker)
+
+```bash
+# Clone and setup
+git clone https://github.com/targeted-DK/ai-calendar-agent.git
+cd ai-calendar-agent
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# Configure
+cp .env.example .env
+# Edit .env (set DATABASE_URL to your PostgreSQL)
+
 # Initialize database
 python database/init_db.py
 
-# Set up Google Calendar (follow prompts)
-python scripts/test_calendar.py
-
-# Install Ollama + Mistral (if using local LLM)
-# See: https://ollama.ai
-ollama pull mistral:7b-instruct-q4_0
+# Run
+PYTHONPATH=. python scripts/plan_workouts.py --days=3 --dry-run
 ```
 
-### Configuration
+---
 
-Edit `config/goals.yaml` to set your training goals:
+## Configuration
+
+### Environment Variables (.env)
+
+```bash
+# LLM Provider
+LLM_PROVIDER=ollama
+OLLAMA_MODEL=gpt-oss:20b-cloud          # Cloud model (fast, requires ollama signin)
+# OLLAMA_MODEL=mistral:7b-instruct-q4_0 # Local model (slower, no auth needed)
+OLLAMA_BASE_URL=http://host.docker.internal:11434  # For Docker
+# OLLAMA_BASE_URL=http://localhost:11434           # For non-Docker
+
+# Database (for Docker)
+POSTGRES_USER=life_agent
+POSTGRES_PASSWORD=your_secure_password
+POSTGRES_DB=life_optimization
+DATABASE_URL=postgresql://life_agent:your_secure_password@localhost:5432/life_optimization
+
+# Google Calendar
+GOOGLE_CALENDAR_CREDENTIALS_PATH=credentials.json
+GOOGLE_CALENDAR_TOKEN_PATH=token.json
+
+# Garmin
+GARMIN_EMAIL=your_email@gmail.com
+GARMIN_PASSWORD=your_garmin_password
+
+# Timezone
+USER_TIMEZONE=America/Chicago
+```
+
+### Training Goals (config/goals.yaml)
 
 ```yaml
 weekly_structure:
@@ -148,47 +242,28 @@ preferences:
   evening_hours: [17, 20]
 ```
 
-### Running
-
-```bash
-# Manual run (preview)
-python scripts/plan_workouts.py --days=5 --dry-run
-
-# Manual run (create workouts)
-python scripts/plan_workouts.py --days=5
-
-# Set up cron (every 30 minutes)
-crontab -e
-# Add: */30 * * * * cd /path/to/ai-calendar-agent && ./scripts/run_import.sh
-```
-
 ---
 
-## Environment Variables
+## LLM Model Support
 
+The system supports multiple LLM models with automatic fallback:
+
+| Model | Type | Speed | Notes |
+|-------|------|-------|-------|
+| `gpt-oss:20b-cloud` | Cloud | ~30 sec | Requires `ollama signin` |
+| `mistral:7b-instruct-q4_0` | Local | ~2-3 min | No auth needed |
+| `qwen3-vl:4b` | Local | ~3-5 min | Vision-language model |
+
+**Fallback mechanism:** If the primary model fails (timeout/error), the system automatically tries the fallback model.
+
+Configure in `.env`:
 ```bash
-# Database
-POSTGRES_HOST=localhost
-POSTGRES_PORT=5432
-POSTGRES_DB=calendar_agent
-POSTGRES_USER=your_user
-POSTGRES_PASSWORD=your_password
+OLLAMA_MODEL=gpt-oss:20b-cloud  # Primary model
+```
 
-# LLM Provider
-LLM_PROVIDER=ollama              # but this is up to the user's preference
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=mistral:7b-instruct-q4_0
-
-# Google Calendar
-GOOGLE_CALENDAR_CREDENTIALS_PATH=credentials.json
-GOOGLE_CALENDAR_TOKEN_PATH=token.json
-
-# Garmin
-GARMIN_EMAIL=your_email
-GARMIN_PASSWORD=your_password
-
-# Timezone
-USER_TIMEZONE=America/Chicago
+Fallback is configured in `scripts/plan_workouts.py`:
+```python
+models_to_try = [settings.ollama_model, "qwen3-vl:4b"]  # Primary + fallback
 ```
 
 ---
@@ -210,7 +285,7 @@ The LLM receives:
 - Recent workout history
 - Detailed workout templates
 
-Then generates a personalized workout with:
+Then generates TWO personalized workout options with:
 - Specific exercises, sets, reps, weights
 - Target heart rate zones
 - Warmup and cooldown routines
@@ -218,10 +293,10 @@ Then generates a personalized workout with:
 
 ### 3. Active Rescheduling
 The system continuously monitors for:
-- Config changes (removed swim? → delete swim workouts)
-- Calendar conflicts (new meeting? → move workout to evening)
-- Health changes (poor sleep? → suggest backup plan)
-- Exceeded targets (3 runs done? → don't schedule 4th)
+- Config changes (removed swim? -> delete swim workouts)
+- Calendar conflicts (new meeting? -> move workout to evening)
+- Health changes (poor sleep? -> suggest backup plan)
+- Exceeded targets (3 runs done? -> don't schedule 4th)
 
 ### 4. Reconciliation
 After workouts, the system:
@@ -234,10 +309,10 @@ After workouts, the system:
 ## Testing
 
 ```bash
-# Run regression tests
-pytest tests/ -v
+# Run in Docker
+docker compose exec app pytest tests/ -v
 
-# Run specific test file
+# Run locally
 pytest tests/test_workout_functions.py -v
 ```
 
@@ -250,11 +325,19 @@ Tests cover:
 
 ---
 
+## Version History
+
+- **v1.1.0** - LLM fallback mechanism, Docker fixes, version tracking
+- **v1.0.0** - Initial release with Docker setup
+
+---
+
 ## Tech Stack
 
 - **Python 3.11**
+- **Docker & Docker Compose** - Containerized deployment
 - **PostgreSQL** - Health metrics and activity storage
-- **Ollama + Mistral 7B** - Local LLM for workout generation
+- **Ollama** - Local or cloud LLM inference
 - **Google Calendar API** - Schedule management
 - **Garmin Connect API** - Health and fitness data
 - **GitHub Actions** - CI/CD pipeline
