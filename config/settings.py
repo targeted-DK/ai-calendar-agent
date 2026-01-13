@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings
-from typing import Literal
+from typing import Literal, Optional, List
 
 
 class Settings(BaseSettings):
@@ -8,10 +8,10 @@ class Settings(BaseSettings):
     # LLM Provider
     llm_provider: Literal["anthropic", "openai", "gemini", "ollama"] = "anthropic"
 
-    # API Keys
-    anthropic_api_key: str = ""
-    openai_api_key: str = ""
-    google_api_key: str = ""
+    # API Keys (Optional for security validation)
+    anthropic_api_key: Optional[str] = None
+    openai_api_key: Optional[str] = None
+    google_api_key: Optional[str] = None
 
     # Model Selection
     anthropic_model: str = "claude-3-5-sonnet-20241022"
@@ -38,6 +38,21 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = False
+        extra = "ignore"  # Allow POSTGRES_* vars for docker-compose
+
+
+def validate_api_keys(settings_obj: Settings) -> List[str]:
+    """Validate that required API keys are configured."""
+    missing_keys = []
+    
+    if settings_obj.llm_provider == "anthropic" and not settings_obj.anthropic_api_key:
+        missing_keys.append("ANTHROPIC_API_KEY")
+    elif settings_obj.llm_provider == "openai" and not settings_obj.openai_api_key:
+        missing_keys.append("OPENAI_API_KEY")
+    elif settings_obj.llm_provider == "gemini" and not settings_obj.google_api_key:
+        missing_keys.append("GOOGLE_API_KEY")
+    
+    return missing_keys
 
 
 settings = Settings()

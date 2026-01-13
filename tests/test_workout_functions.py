@@ -33,7 +33,7 @@ class TestSanitizeWorkoutResponse:
         """Valid LLM response should pass through unchanged."""
         response = {
             'should_workout': True,
-            'workout': {
+            'option_a': {
                 'type': 'Run',
                 'title': 'Easy Run',
                 'duration_minutes': 45,
@@ -42,19 +42,38 @@ class TestSanitizeWorkoutResponse:
                 'main_workout': '30 min easy',
                 'cooldown': 'Stretch',
                 'backup_plan': 'Walk instead',
+            },
+            'option_b': {
+                'type': 'Strength',
+                'title': 'Upper Body',
+                'duration_minutes': 45,
+                'time_suggestion': '7:00 AM',
+                'warmup': '5 min warmup',
+                'main_workout': 'Strength training',
+                'cooldown': 'Stretch',
+                'backup_plan': 'Reduce weight',
             }
         }
         result = sanitize_func(response, date.today())
 
         assert result is not None
-        assert result['workout']['duration_minutes'] == 45
-        assert result['workout']['time_suggestion'] == '7:00 AM'
+        assert result['option_a']['duration_minutes'] == 45
+        assert result['option_a']['time_suggestion'] == '7:00 AM'
 
     def test_time_too_early_adjusted(self, sanitize_func):
         """Times before 5 AM should be adjusted to 6 AM."""
         response = {
-            'workout': {
+            'option_a': {
                 'type': 'Run',
+                'time_suggestion': '4:00 AM',
+                'duration_minutes': 30,
+                'warmup': 'test',
+                'main_workout': 'test',
+                'cooldown': 'test',
+                'backup_plan': 'test',
+            },
+            'option_b': {
+                'type': 'Strength',
                 'time_suggestion': '4:00 AM',
                 'duration_minutes': 30,
                 'warmup': 'test',
@@ -65,14 +84,23 @@ class TestSanitizeWorkoutResponse:
         }
         result = sanitize_func(response, date.today())
 
-        assert result['workout']['time_suggestion'] == '6:00 AM'
+        assert result['option_a']['time_suggestion'] == '6:00 AM'
         assert len(result['_issues']) > 0
 
     def test_time_too_late_adjusted(self, sanitize_func):
         """Times after 9 PM should be adjusted to 6 PM."""
         response = {
-            'workout': {
+            'option_a': {
                 'type': 'Run',
+                'time_suggestion': '10:30 PM',
+                'duration_minutes': 30,
+                'warmup': 'test',
+                'main_workout': 'test',
+                'cooldown': 'test',
+                'backup_plan': 'test',
+            },
+            'option_b': {
+                'type': 'Strength',
                 'time_suggestion': '10:30 PM',
                 'duration_minutes': 30,
                 'warmup': 'test',
@@ -83,13 +111,22 @@ class TestSanitizeWorkoutResponse:
         }
         result = sanitize_func(response, date.today())
 
-        assert result['workout']['time_suggestion'] == '6:00 PM'
+        assert result['option_a']['time_suggestion'] == '6:00 PM'
 
     def test_duration_too_short_adjusted(self, sanitize_func):
         """Duration under 15 min should be adjusted to 20 min."""
         response = {
-            'workout': {
+            'option_a': {
                 'type': 'Run',
+                'time_suggestion': '7:00 AM',
+                'duration_minutes': 5,
+                'warmup': 'test',
+                'main_workout': 'test',
+                'cooldown': 'test',
+                'backup_plan': 'test',
+            },
+            'option_b': {
+                'type': 'Strength',
                 'time_suggestion': '7:00 AM',
                 'duration_minutes': 5,
                 'warmup': 'test',
@@ -100,13 +137,22 @@ class TestSanitizeWorkoutResponse:
         }
         result = sanitize_func(response, date.today())
 
-        assert result['workout']['duration_minutes'] == 20
+        assert result['option_a']['duration_minutes'] == 20
 
     def test_duration_too_long_adjusted(self, sanitize_func):
         """Duration over 180 min should be adjusted to 90 min."""
         response = {
-            'workout': {
+            'option_a': {
                 'type': 'Run',
+                'time_suggestion': '7:00 AM',
+                'duration_minutes': 240,
+                'warmup': 'test',
+                'main_workout': 'test',
+                'cooldown': 'test',
+                'backup_plan': 'test',
+            },
+            'option_b': {
+                'type': 'Strength',
                 'time_suggestion': '7:00 AM',
                 'duration_minutes': 240,
                 'warmup': 'test',
@@ -117,13 +163,21 @@ class TestSanitizeWorkoutResponse:
         }
         result = sanitize_func(response, date.today())
 
-        assert result['workout']['duration_minutes'] == 90
+        assert result['option_a']['duration_minutes'] == 90
 
     def test_missing_warmup_added(self, sanitize_func):
         """Missing warmup should be filled with default."""
         response = {
-            'workout': {
+            'option_a': {
                 'type': 'Run',
+                'time_suggestion': '7:00 AM',
+                'duration_minutes': 45,
+                'main_workout': 'test',
+                'cooldown': 'test',
+                'backup_plan': 'test',
+            },
+            'option_b': {
+                'type': 'Strength',
                 'time_suggestion': '7:00 AM',
                 'duration_minutes': 45,
                 'main_workout': 'test',
@@ -133,14 +187,22 @@ class TestSanitizeWorkoutResponse:
         }
         result = sanitize_func(response, date.today())
 
-        assert result['workout']['warmup'] is not None
-        assert len(result['workout']['warmup']) > 0
+        assert result['option_a']['warmup'] is not None
+        assert len(result['option_a']['warmup']) > 0
 
     def test_missing_backup_plan_added(self, sanitize_func):
         """Missing backup_plan should be filled with default."""
         response = {
-            'workout': {
+            'option_a': {
                 'type': 'Run',
+                'time_suggestion': '7:00 AM',
+                'duration_minutes': 45,
+                'warmup': 'test',
+                'main_workout': 'test',
+                'cooldown': 'test',
+            },
+            'option_b': {
+                'type': 'Strength',
                 'time_suggestion': '7:00 AM',
                 'duration_minutes': 45,
                 'warmup': 'test',
@@ -150,8 +212,8 @@ class TestSanitizeWorkoutResponse:
         }
         result = sanitize_func(response, date.today())
 
-        assert result['workout']['backup_plan'] is not None
-        assert 'reduce' in result['workout']['backup_plan'].lower() or 'walk' in result['workout']['backup_plan'].lower()
+        assert result['option_a']['backup_plan'] is not None
+        assert 'reduce' in result['option_a']['backup_plan'].lower() or 'walk' in result['option_a']['backup_plan'].lower()
 
     def test_empty_response_returns_none(self, sanitize_func):
         """Empty response should return None."""
@@ -164,8 +226,17 @@ class TestSanitizeWorkoutResponse:
     def test_invalid_time_format_uses_default(self, sanitize_func):
         """Invalid time format should default to 6:30 AM."""
         response = {
-            'workout': {
+            'option_a': {
                 'type': 'Run',
+                'time_suggestion': 'sometime tomorrow',
+                'duration_minutes': 45,
+                'warmup': 'test',
+                'main_workout': 'test',
+                'cooldown': 'test',
+                'backup_plan': 'test',
+            },
+            'option_b': {
+                'type': 'Strength',
                 'time_suggestion': 'sometime tomorrow',
                 'duration_minutes': 45,
                 'warmup': 'test',
@@ -176,7 +247,7 @@ class TestSanitizeWorkoutResponse:
         }
         result = sanitize_func(response, date.today())
 
-        assert result['workout']['time_suggestion'] == '6:30 AM'
+        assert result['option_a']['time_suggestion'] == '6:30 AM'
 
 
 # =============================================================================

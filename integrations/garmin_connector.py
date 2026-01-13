@@ -11,6 +11,53 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+# =============================================================================
+# DATA PRIORITY LEVELS
+# =============================================================================
+# Priority determines what data to include in LLM prompts
+# Higher priority = more impact on workout decisions
+
+DATA_PRIORITY = {
+    # 🔴 CRITICAL (Priority 1) - Always include, directly affects today's workout
+    'training_readiness': 1,       # get_training_readiness() - Garmin's readiness score
+    'recovery_score': 1,           # get_recovery_score() - our calculated recovery
+    'sleep': 1,                    # get_sleep_data() - duration, quality, stages
+    'hrv': 1,                      # get_hrv_data() - heart rate variability
+    'body_battery': 1,             # get_body_battery() - energy level
+    'recent_activities': 1,        # get_activities() - list of recent workouts
+    'activity_details': 1,         # get_activity_details() - basic activity info
+    'activity_exercise_sets': 1,   # get_activity_exercise_sets() - strength sets/reps/weights
+    'activity_splits': 1,          # get_activity_splits() - cardio lap/split data
+
+    # 🟡 IMPORTANT (Priority 2) - Include when available, useful context
+    'training_load_balance': 2,    # get_training_load_balance() - acute vs chronic load
+    'training_status': 2,          # get_training_status() - productive/maintaining/detraining
+    'stress': 2,                   # get_stress_data() - stress levels throughout day
+    'heart_rate': 2,               # get_heart_rate_data() - HR throughout day
+    'activity_hr_zones': 2,        # get_activity_hr_zones() - time in each HR zone
+    'daily_stats': 2,              # get_daily_stats() - steps, calories, intensity mins
+
+    # 🟢 SECONDARY (Priority 3) - Include if space allows
+    'race_predictions': 3,         # get_race_predictions() - 5K, 10K, HM, marathon times
+    'personal_records': 3,         # get_personal_records() - PRs
+    'gear_stats': 3,               # get_gear_stats() - all gear with usage stats
+    'activity_gear': 3,            # get_activity_gear() - gear used for specific activity
+    'activity_weather': 3,         # get_activity_weather() - weather during activity
+    'body_composition': 3,         # get_body_composition() - weight, body fat, muscle
+    'fitness_age': 3,              # get_fitness_age() - calculated fitness age
+
+    # ⚪ LOW (Priority 4) - Skip unless specifically relevant
+    'spo2': 4,                     # get_spo2_data() - blood oxygen
+    'respiration': 4,              # get_respiration_data() - breathing rate
+    'hydration': 4,                # get_hydration_data() - water intake
+    'challenges': 4,               # get_adhoc_challenges() - badges/challenges
+    'goals': 4,                    # get_goals() - Garmin goals (not our app goals)
+}
+
+def get_data_priority(data_type: str) -> int:
+    """Get priority level for a data type. Lower = more important."""
+    return DATA_PRIORITY.get(data_type, 5)  # Default to lowest priority
+
 
 class GarminConnector:
     """
@@ -389,6 +436,530 @@ class GarminConnector:
         except Exception as e:
             print(f"❌ Error fetching Garmin training status: {e}")
             return self._mock_training_status()
+
+    # =========================================================================
+    # DETAILED ACTIVITY DATA METHODS
+    # =========================================================================
+
+    def get_activity_splits(self, activity_id: str) -> Dict[str, Any]:
+        """
+        Get split/lap data for an activity (running, cycling).
+
+        Returns per-lap: pace, HR, distance, elevation, cadence.
+        """
+        if not self._authenticated:
+            return {'activity_id': activity_id, 'splits': [], 'source': 'mock'}
+
+        try:
+            splits = self.client.get_activity_splits(activity_id)
+            return {
+                'activity_id': activity_id,
+                'splits': splits,
+                'raw_data': splits
+            }
+        except Exception as e:
+            print(f"❌ Error fetching activity splits: {e}")
+            return {'activity_id': activity_id, 'splits': [], 'error': str(e)}
+
+    def get_activity_exercise_sets(self, activity_id: str) -> Dict[str, Any]:
+        """
+        Get strength training exercise sets for an activity.
+
+        Returns: exercises with sets, reps, weight for each.
+        """
+        if not self._authenticated:
+            return {'activity_id': activity_id, 'exercises': [], 'source': 'mock'}
+
+        try:
+            sets_data = self.client.get_activity_exercise_sets(activity_id)
+            return {
+                'activity_id': activity_id,
+                'exercises': sets_data,
+                'raw_data': sets_data
+            }
+        except Exception as e:
+            print(f"❌ Error fetching exercise sets: {e}")
+            return {'activity_id': activity_id, 'exercises': [], 'error': str(e)}
+
+    def get_activity_hr_zones(self, activity_id: str) -> Dict[str, Any]:
+        """
+        Get heart rate zone distribution for an activity.
+
+        Returns time spent in each HR zone (1-5).
+        """
+        if not self._authenticated:
+            return {'activity_id': activity_id, 'hr_zones': [], 'source': 'mock'}
+
+        try:
+            hr_zones = self.client.get_activity_hr_in_timezones(activity_id)
+            return {
+                'activity_id': activity_id,
+                'hr_zones': hr_zones,
+                'raw_data': hr_zones
+            }
+        except Exception as e:
+            print(f"❌ Error fetching HR zones: {e}")
+            return {'activity_id': activity_id, 'hr_zones': [], 'error': str(e)}
+
+    def get_activity_weather(self, activity_id: str) -> Dict[str, Any]:
+        """
+        Get weather conditions during an activity.
+        """
+        if not self._authenticated:
+            return {'activity_id': activity_id, 'weather': None, 'source': 'mock'}
+
+        try:
+            weather = self.client.get_activity_weather(activity_id)
+            return {
+                'activity_id': activity_id,
+                'weather': weather,
+                'raw_data': weather
+            }
+        except Exception as e:
+            print(f"❌ Error fetching activity weather: {e}")
+            return {'activity_id': activity_id, 'weather': None, 'error': str(e)}
+
+    def get_activity_gear(self, activity_id: str) -> Dict[str, Any]:
+        """
+        Get gear/equipment used for an activity (shoes, bike, etc.).
+        """
+        if not self._authenticated:
+            return {'activity_id': activity_id, 'gear': None, 'source': 'mock'}
+
+        try:
+            gear = self.client.get_activity_gear(activity_id)
+            return {
+                'activity_id': activity_id,
+                'gear': gear,
+                'raw_data': gear
+            }
+        except Exception as e:
+            print(f"❌ Error fetching activity gear: {e}")
+            return {'activity_id': activity_id, 'gear': None, 'error': str(e)}
+
+    # =========================================================================
+    # BODY COMPOSITION & WELLNESS
+    # =========================================================================
+
+    def get_body_composition(self, target_date: Optional[date] = None) -> Dict[str, Any]:
+        """
+        Get body composition data (weight, body fat, muscle mass, etc.).
+        """
+        if not self._authenticated:
+            return self._mock_body_composition(target_date)
+
+        try:
+            if target_date is None:
+                target_date = date.today()
+
+            # Get weight data
+            end_date = target_date
+            start_date = target_date - timedelta(days=30)
+
+            body_comp = self.client.get_body_composition(start_date.isoformat(), end_date.isoformat())
+
+            return {
+                'date': target_date.isoformat(),
+                'body_composition': body_comp,
+                'raw_data': body_comp
+            }
+        except Exception as e:
+            print(f"❌ Error fetching body composition: {e}")
+            return self._mock_body_composition(target_date)
+
+    def get_body_battery(self, target_date: Optional[date] = None) -> Dict[str, Any]:
+        """
+        Get Body Battery (energy level) data for a specific date.
+        """
+        if not self._authenticated:
+            return self._mock_body_battery(target_date)
+
+        try:
+            if target_date is None:
+                target_date = date.today()
+
+            body_battery = self.client.get_body_battery(target_date.isoformat())
+
+            # Extract key metrics
+            charged = 0
+            drained = 0
+            current_level = None
+
+            if isinstance(body_battery, list) and body_battery:
+                values = [b.get('bodyBatteryLevel') for b in body_battery if b.get('bodyBatteryLevel')]
+                if values:
+                    current_level = values[-1]  # Most recent
+                    charged = max(values) - min(values) if len(values) > 1 else 0
+
+            return {
+                'date': target_date.isoformat(),
+                'current_level': current_level,
+                'charged': charged,
+                'drained': drained,
+                'raw_data': body_battery
+            }
+        except Exception as e:
+            print(f"❌ Error fetching body battery: {e}")
+            return self._mock_body_battery(target_date)
+
+    def get_hrv_data(self, target_date: Optional[date] = None) -> Dict[str, Any]:
+        """
+        Get Heart Rate Variability (HRV) data.
+
+        HRV is a key recovery indicator.
+        """
+        if not self._authenticated:
+            return self._mock_hrv_data(target_date)
+
+        try:
+            if target_date is None:
+                target_date = date.today()
+
+            hrv = self.client.get_hrv_data(target_date.isoformat())
+
+            return {
+                'date': target_date.isoformat(),
+                'hrv_data': hrv,
+                'raw_data': hrv
+            }
+        except Exception as e:
+            print(f"❌ Error fetching HRV data: {e}")
+            return self._mock_hrv_data(target_date)
+
+    def get_respiration_data(self, target_date: Optional[date] = None) -> Dict[str, Any]:
+        """
+        Get respiration rate data.
+        """
+        if not self._authenticated:
+            return {'date': target_date.isoformat() if target_date else date.today().isoformat(), 'respiration': None, 'source': 'mock'}
+
+        try:
+            if target_date is None:
+                target_date = date.today()
+
+            resp = self.client.get_respiration_data(target_date.isoformat())
+
+            return {
+                'date': target_date.isoformat(),
+                'respiration': resp,
+                'raw_data': resp
+            }
+        except Exception as e:
+            print(f"❌ Error fetching respiration data: {e}")
+            return {'date': target_date.isoformat(), 'respiration': None, 'error': str(e)}
+
+    def get_spo2_data(self, target_date: Optional[date] = None) -> Dict[str, Any]:
+        """
+        Get blood oxygen (SpO2) data.
+        """
+        if not self._authenticated:
+            return {'date': target_date.isoformat() if target_date else date.today().isoformat(), 'spo2': None, 'source': 'mock'}
+
+        try:
+            if target_date is None:
+                target_date = date.today()
+
+            spo2 = self.client.get_spo2_data(target_date.isoformat())
+
+            return {
+                'date': target_date.isoformat(),
+                'spo2': spo2,
+                'raw_data': spo2
+            }
+        except Exception as e:
+            print(f"❌ Error fetching SpO2 data: {e}")
+            return {'date': target_date.isoformat(), 'spo2': None, 'error': str(e)}
+
+    def get_hydration_data(self, target_date: Optional[date] = None) -> Dict[str, Any]:
+        """
+        Get hydration tracking data.
+        """
+        if not self._authenticated:
+            return {'date': target_date.isoformat() if target_date else date.today().isoformat(), 'hydration': None, 'source': 'mock'}
+
+        try:
+            if target_date is None:
+                target_date = date.today()
+
+            hydration = self.client.get_hydration_data(target_date.isoformat())
+
+            return {
+                'date': target_date.isoformat(),
+                'hydration': hydration,
+                'raw_data': hydration
+            }
+        except Exception as e:
+            print(f"❌ Error fetching hydration data: {e}")
+            return {'date': target_date.isoformat(), 'hydration': None, 'error': str(e)}
+
+    # =========================================================================
+    # TRAINING & PERFORMANCE METRICS
+    # =========================================================================
+
+    def get_training_readiness(self, target_date: Optional[date] = None) -> Dict[str, Any]:
+        """
+        Get Training Readiness score (newer Garmin metric).
+
+        Combines sleep, recovery, HRV, training load into readiness score.
+        """
+        if not self._authenticated:
+            return {'date': target_date.isoformat() if target_date else date.today().isoformat(), 'readiness': None, 'source': 'mock'}
+
+        try:
+            if target_date is None:
+                target_date = date.today()
+
+            readiness = self.client.get_training_readiness(target_date.isoformat())
+
+            return {
+                'date': target_date.isoformat(),
+                'readiness': readiness,
+                'raw_data': readiness
+            }
+        except Exception as e:
+            print(f"❌ Error fetching training readiness: {e}")
+            return {'date': target_date.isoformat(), 'readiness': None, 'error': str(e)}
+
+    def get_training_load_balance(self) -> Dict[str, Any]:
+        """
+        Get training load balance (acute vs chronic load).
+        """
+        if not self._authenticated:
+            return {'load_balance': None, 'source': 'mock'}
+
+        try:
+            load = self.client.get_training_status()
+
+            return {
+                'load_balance': load,
+                'raw_data': load
+            }
+        except Exception as e:
+            print(f"❌ Error fetching training load balance: {e}")
+            return {'load_balance': None, 'error': str(e)}
+
+    def get_race_predictions(self) -> Dict[str, Any]:
+        """
+        Get race time predictions (5K, 10K, half marathon, marathon).
+        """
+        if not self._authenticated:
+            return {'predictions': None, 'source': 'mock'}
+
+        try:
+            predictions = self.client.get_race_predictions()
+
+            return {
+                'predictions': predictions,
+                'raw_data': predictions
+            }
+        except Exception as e:
+            print(f"❌ Error fetching race predictions: {e}")
+            return {'predictions': None, 'error': str(e)}
+
+    def get_personal_records(self) -> Dict[str, Any]:
+        """
+        Get personal records (PRs) for various activities.
+        """
+        if not self._authenticated:
+            return {'records': None, 'source': 'mock'}
+
+        try:
+            records = self.client.get_personal_record()
+
+            return {
+                'records': records,
+                'raw_data': records
+            }
+        except Exception as e:
+            print(f"❌ Error fetching personal records: {e}")
+            return {'records': None, 'error': str(e)}
+
+    def get_fitness_age(self) -> Dict[str, Any]:
+        """
+        Get fitness age calculation from Garmin.
+        """
+        if not self._authenticated:
+            return {'fitness_age': None, 'source': 'mock'}
+
+        try:
+            # This may be part of user profile or stats
+            stats = self.client.get_user_summary(date.today().isoformat())
+
+            return {
+                'fitness_age': stats.get('fitnessAge'),
+                'raw_data': stats
+            }
+        except Exception as e:
+            print(f"❌ Error fetching fitness age: {e}")
+            return {'fitness_age': None, 'error': str(e)}
+
+    # =========================================================================
+    # WORKOUT PROGRAMS & GOALS
+    # =========================================================================
+
+    def get_goals(self) -> Dict[str, Any]:
+        """
+        Get user's fitness goals set in Garmin Connect.
+        """
+        if not self._authenticated:
+            return {'goals': None, 'source': 'mock'}
+
+        try:
+            goals = self.client.get_goals()
+
+            return {
+                'goals': goals,
+                'raw_data': goals
+            }
+        except Exception as e:
+            print(f"❌ Error fetching goals: {e}")
+            return {'goals': None, 'error': str(e)}
+
+    def get_adhoc_challenges(self) -> Dict[str, Any]:
+        """
+        Get active challenges and badges.
+        """
+        if not self._authenticated:
+            return {'challenges': None, 'source': 'mock'}
+
+        try:
+            challenges = self.client.get_adhoc_challenges()
+
+            return {
+                'challenges': challenges,
+                'raw_data': challenges
+            }
+        except Exception as e:
+            print(f"❌ Error fetching challenges: {e}")
+            return {'challenges': None, 'error': str(e)}
+
+    def get_gear_stats(self) -> Dict[str, Any]:
+        """
+        Get all gear/equipment with usage stats (shoe mileage, etc.).
+        """
+        if not self._authenticated:
+            return {'gear': None, 'source': 'mock'}
+
+        try:
+            gear = self.client.get_gear_stats()
+
+            return {
+                'gear': gear,
+                'raw_data': gear
+            }
+        except Exception as e:
+            print(f"❌ Error fetching gear stats: {e}")
+            return {'gear': None, 'error': str(e)}
+
+    # =========================================================================
+    # COMPREHENSIVE DATA PULL
+    # =========================================================================
+
+    def get_full_day_summary(self, target_date: Optional[date] = None) -> Dict[str, Any]:
+        """
+        Get ALL available data for a single day.
+
+        Comprehensive pull for LLM context.
+        """
+        if target_date is None:
+            target_date = date.today()
+
+        return {
+            'date': target_date.isoformat(),
+            'sleep': self.get_sleep_data(target_date),
+            'daily_stats': self.get_daily_stats(target_date),
+            'stress': self.get_stress_data(target_date),
+            'heart_rate': self.get_heart_rate_data(target_date),
+            'body_battery': self.get_body_battery(target_date),
+            'hrv': self.get_hrv_data(target_date),
+            'recovery_score': self.get_recovery_score(target_date),
+            'training_readiness': self.get_training_readiness(target_date),
+            'respiration': self.get_respiration_data(target_date),
+            'spo2': self.get_spo2_data(target_date),
+            'hydration': self.get_hydration_data(target_date),
+        }
+
+    def get_full_activity_details(self, activity_id: str) -> Dict[str, Any]:
+        """
+        Get ALL available data for a single activity.
+
+        Comprehensive pull including splits, HR zones, sets, weather, gear.
+        """
+        basic = self.get_activity_details(activity_id)
+
+        return {
+            'basic': basic,
+            'splits': self.get_activity_splits(activity_id),
+            'hr_zones': self.get_activity_hr_zones(activity_id),
+            'exercise_sets': self.get_activity_exercise_sets(activity_id),
+            'weather': self.get_activity_weather(activity_id),
+            'gear': self.get_activity_gear(activity_id),
+        }
+
+    def get_training_context(self) -> Dict[str, Any]:
+        """
+        Get overall training context for planning.
+
+        Includes training status, load, predictions, PRs, goals.
+        """
+        return {
+            'training_status': self.get_training_status(),
+            'load_balance': self.get_training_load_balance(),
+            'race_predictions': self.get_race_predictions(),
+            'personal_records': self.get_personal_records(),
+            'fitness_age': self.get_fitness_age(),
+            'goals': self.get_goals(),
+            'gear': self.get_gear_stats(),
+        }
+
+    # =========================================================================
+    # ADDITIONAL MOCK DATA METHODS
+    # =========================================================================
+
+    def _mock_body_composition(self, target_date: Optional[date] = None) -> Dict[str, Any]:
+        """Generate mock body composition data."""
+        import random
+        if target_date is None:
+            target_date = date.today()
+
+        return {
+            'date': target_date.isoformat(),
+            'weight_kg': round(random.uniform(70, 85), 1),
+            'body_fat_percent': round(random.uniform(12, 20), 1),
+            'muscle_mass_kg': round(random.uniform(55, 70), 1),
+            'bone_mass_kg': round(random.uniform(2.5, 3.5), 1),
+            'body_water_percent': round(random.uniform(55, 65), 1),
+            'bmi': round(random.uniform(22, 27), 1),
+            'source': 'mock'
+        }
+
+    def _mock_body_battery(self, target_date: Optional[date] = None) -> Dict[str, Any]:
+        """Generate mock body battery data."""
+        import random
+        if target_date is None:
+            target_date = date.today()
+
+        return {
+            'date': target_date.isoformat(),
+            'current_level': random.randint(30, 90),
+            'charged': random.randint(20, 60),
+            'drained': random.randint(20, 50),
+            'source': 'mock'
+        }
+
+    def _mock_hrv_data(self, target_date: Optional[date] = None) -> Dict[str, Any]:
+        """Generate mock HRV data."""
+        import random
+        if target_date is None:
+            target_date = date.today()
+
+        return {
+            'date': target_date.isoformat(),
+            'hrv_weekly_avg': random.randint(40, 80),
+            'hrv_last_night': random.randint(35, 85),
+            'hrv_status': random.choice(['balanced', 'low', 'high']),
+            'source': 'mock'
+        }
 
     # Mock data methods for testing without Garmin credentials
 

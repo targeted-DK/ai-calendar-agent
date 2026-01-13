@@ -42,6 +42,7 @@ from integrations.google_calendar import GoogleCalendarClient
 from integrations.garmin_connector import GarminConnector
 from database.connection import Database
 from config import settings
+from version import VERSION_FULL
 
 # User timezone
 USER_TIMEZONE = ZoneInfo(os.getenv('USER_TIMEZONE', 'America/Chicago'))
@@ -101,18 +102,43 @@ def get_health_context(garmin: GarminConnector, days: int = 7) -> Dict:
 
 
 def get_recent_workouts(garmin: GarminConnector, days: int = 7) -> List[Dict]:
-    """Get recent workout history from Garmin."""
+    """Get recent workout history from Garmin with detailed exercise data."""
     workouts = []
     try:
         activities = garmin.get_activities(limit=20)
         for activity in activities[:10]:
-            # Garmin connector returns processed data with flat keys
-            workouts.append({
-                'type': activity.get('activity_type', 'unknown'),
+            activity_type = activity.get('activity_type', 'unknown').lower()
+            activity_id = activity.get('external_id')
+
+            workout = {
+                'type': activity_type,
                 'date': activity.get('timestamp', '')[:10],
                 'duration_min': round(activity.get('duration_minutes', 0)),
                 'calories': activity.get('calories_burned', 0),
-            })
+                'avg_hr': activity.get('avg_heart_rate'),
+                'training_effect': activity.get('aerobic_training_effect'),
+            }
+
+            # Fetch detailed data based on activity type
+            if activity_id:
+                try:
+                    # Strength training - get exercises/sets/reps/weights
+                    if 'strength' in activity_type or 'weight' in activity_type:
+                        sets_data = garmin.get_activity_exercise_sets(activity_id)
+                        if sets_data.get('exercises'):
+                            workout['exercises'] = sets_data['exercises']
+
+                    # Cardio - get splits/laps
+                    elif any(t in activity_type for t in ['run', 'cycling', 'swim', 'bike']):
+                        splits_data = garmin.get_activity_splits(activity_id)
+                        if splits_data.get('splits'):
+                            workout['splits'] = splits_data['splits']
+                        workout['distance_km'] = activity.get('distance_km', 0)
+
+                except Exception as e:
+                    logger.debug(f"Could not get details for {activity_id}: {e}")
+
+            workouts.append(workout)
     except Exception as e:
         logger.warning(f"Could not get workout history: {e}")
 
@@ -318,14 +344,10 @@ Targets: {json.dumps(week_progress.get('targets', {}), indent=2)}
 === CALENDAR (next 7 days) - IMPORTANT: Avoid scheduling during these times! ===
 {json.dumps(calendar.get('events_by_day', {}), indent=2)}
 
-=== ALREADY SCHEDULED WORKOUTS (DO NOT DUPLICATE TYPES ON CONSECUTIVE DAYS!) ===
+=== ALREADY SCHEDULED WORKOUTS ===
 {chr(10).join(f"- {w['start'][:10]}: {w['title']}" for w in calendar.get('existing_workouts', [])) if calendar.get('existing_workouts') else 'No workouts scheduled yet'}
 
-=== WORKOUTS JUST PLANNED IN THIS SESSION (VERY IMPORTANT!) ===
-{chr(10).join(f"- {w['date']}: {w['type']} - {w['title']}" for w in created_this_run) if created_this_run else 'None yet - you are planning the first day'}
-
-CRITICAL: Look at SCHEDULED WORKOUTS COUNT above. Do NOT exceed weekly targets!
-If runs are already at target, schedule BIKE or STRENGTH instead. Vary the workout types!
+Use the weekly targets and completed counts above to guide your recommendations. Aim for balanced weekly training.
 
 NOTE: Times shown as "HH:MM-HH:MM: Event". Schedule workouts BEFORE or AFTER these busy blocks, not during!
 
@@ -352,25 +374,26 @@ RUN EXAMPLE:
 {templates.get('format_instructions', '')}
 
 === YOUR TASK ===
-Plan TWO DIFFERENT workout options for {target_date} ({target_date.strftime('%A')}).
+Design workout options for {target_date} ({target_date.strftime('%A')}) that advance the user's medium and long-term goals.
 
-Give the user flexibility - they may not be able to do their preferred workout due to:
-- Weather (can't run outside if raining)
-- Equipment (bike broken, gym closed)
-- Time constraints (gym farther than running trail)
-- Social (gym workout with friend vs solo run)
+You have creative freedom to design effective, diverse workouts. Consider:
+1. **Periodization** - Where are we in the training cycle? Base building, intensity, taper?
+2. **Weekly balance** - What's missing this week? What have we done too much of?
+3. **Recovery status** - Today's recovery score should guide intensity, not just workout type
+4. **Goal alignment** - Every workout should serve the primary (Ironman) or secondary (muscle) goal
+5. **Variety** - Avoid monotony. Different stimuli drive adaptation. Be creative with workout structure.
+6. **Calendar reality** - Schedule around busy times, use morning or evening as needed
 
-CRITICAL: The two options MUST be different workout TYPES (e.g., Run + Strength, Bike + Yoga).
-Same type with different intensity is NOT acceptable.
+Provide TWO options so the user can choose based on:
+- Weather/equipment availability
+- Energy level that day
+- Social factors (gym with friend vs solo outdoor)
 
-Consider:
-1. Recovery score and whether to go hard or easy
-2. What workouts were done recently (avoid repeating same type back-to-back)
-3. Weekly targets vs completed (what's missing?)
-4. Calendar conflicts - CHECK BUSY TIMES and schedule around them
-5. Time preference - if morning is blocked, use evening slot
-6. Hybrid training rules (separate hard cardio from strength)
-7. Any injuries or focus areas
+The options can be same type with different focus (e.g., tempo run vs easy run) OR different types entirely.
+What matters is that both options make sense for TODAY given recent training and upcoming goals.
+
+CONTEXT - Workouts already planned in this planning session (avoid duplicating these):
+{chr(10).join(f"- {w['date']}: {w['type']}" for w in created_this_run) if created_this_run else '(This is the first day being planned)'}
 
 Respond in this exact JSON format. All workout fields must be PLAIN TEXT strings (not nested objects or arrays):
 {{
@@ -423,23 +446,34 @@ def call_llm(prompt: str) -> Dict:
     provider = settings.llm_provider
 
     if provider == "ollama":
-        # Call Ollama
-        try:
-            response = requests.post(
-                f"{settings.ollama_base_url}/api/generate",
-                json={
-                    "model": settings.ollama_model,
-                    "prompt": prompt,
-                    "stream": False,
-                    "format": "json",
-                },
-                timeout=120
-            )
-            response.raise_for_status()
-            result = response.json()
-            text = result.get('response', '{}')
-        except Exception as e:
-            logger.error(f"Ollama error: {e}")
+        # Call Ollama with fallback model support
+        models_to_try = [settings.ollama_model, "qwen3-vl:4b"]
+        text = None
+
+        for model in models_to_try:
+            try:
+                logger.info(f"Trying model: {model}")
+                response = requests.post(
+                    f"{settings.ollama_base_url}/api/generate",
+                    json={
+                        "model": model,
+                        "prompt": prompt,
+                        "stream": False,
+                    },
+                    timeout=300
+                )
+                response.raise_for_status()
+                result = response.json()
+                text = result.get('response', '{}')
+                if text and text != '{}':
+                    logger.info(f"Got response from model: {model}")
+                    break
+            except Exception as e:
+                logger.warning(f"Model {model} failed: {e}")
+                continue
+
+        if not text:
+            logger.error("All Ollama models failed")
             return None
 
     elif provider == "openai":
@@ -459,9 +493,16 @@ def call_llm(prompt: str) -> Dict:
         logger.error(f"Unknown LLM provider: {provider}")
         return None
 
-    # Parse JSON
+    # Parse JSON - strip markdown code fences if present
     try:
-        return json.loads(text)
+        cleaned = text.strip()
+        if cleaned.startswith('```'):
+            first_newline = cleaned.find('\n')
+            if first_newline != -1:
+                cleaned = cleaned[first_newline + 1:]
+            if cleaned.endswith('```'):
+                cleaned = cleaned[:-3].strip()
+        return json.loads(cleaned)
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse LLM response: {e}")
         logger.error(f"Response was: {text[:500]}")
@@ -478,21 +519,31 @@ def _sanitize_single_workout(workout: Dict, label: str) -> Tuple[Dict, List[str]
         hour = 6
         minute = 0
 
-        # Handle 24-hour format (e.g., "15:00", "17:30")
+# Handle 24-hour format (e.g., "15:00", "17:30")
         if 'AM' not in time_str.upper() and 'PM' not in time_str.upper():
             # Try to parse as 24-hour format
             clean_time = time_str.split('-')[0].strip()  # Handle "15:00-16:00" -> "15:00"
             if ':' in clean_time:
                 parts = clean_time.split(':')
-                hour = int(parts[0])
-                minute = int(parts[1]) if len(parts) > 1 else 0
+                if len(parts) >= 2 and parts[0].isdigit() and parts[1].isdigit():
+                    hour = int(parts[0])
+                    minute = int(parts[1]) if len(parts) > 1 else 0
+                else:
+                    raise ValueError(f"Invalid time format: {time_str}")
             else:
                 raise ValueError(f"Invalid time format: {time_str}")
         else:
             # Handle AM/PM format
-            parts = time_str.upper().replace('AM', '').replace('PM', '').strip().split(':')
-            hour = int(parts[0])
-            minute = int(parts[1]) if len(parts) > 1 else 0
+            clean_time = time_str.upper().replace('AM', '').replace('PM', '').strip()
+            if ':' in clean_time:
+                parts = clean_time.split(':')
+                if len(parts) >= 2 and parts[0].isdigit() and parts[1].isdigit():
+                    hour = int(parts[0])
+                    minute = int(parts[1]) if len(parts) > 1 else 0
+                else:
+                    raise ValueError(f"Invalid time format: {time_str}")
+            else:
+                raise ValueError(f"Invalid time format: {time_str}")
             if 'PM' in time_str.upper() and hour != 12:
                 hour += 12
             elif 'AM' in time_str.upper() and hour == 12:
@@ -650,7 +701,7 @@ def create_workout_event(
         datetime.min.time().replace(hour=hour, minute=minute),
         tzinfo=USER_TIMEZONE
     )
-    duration = workout.get('duration_minutes', 45)
+    duration = int(workout.get('duration_minutes', 45))
     end = start + timedelta(minutes=duration)
 
     # Build title with option label
@@ -839,9 +890,20 @@ def has_existing_workout(calendar: GoogleCalendarClient, target_date: date) -> b
 def plan_workouts(days_ahead: int = 3, dry_run: bool = False) -> Dict:
     """Main function to plan workouts."""
     logger.info("=" * 60)
-    logger.info(f"WORKOUT PLANNING (LLM-powered) - {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    logger.info(f"WORKOUT PLANNING v{VERSION_FULL} - {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     logger.info(f"Planning for next {days_ahead} days (dry_run={dry_run})")
     logger.info("=" * 60)
+
+    # Validate API keys first
+    if settings.llm_provider == "anthropic" and not settings.anthropic_api_key:
+        logger.error("ANTHROPIC_API_KEY not configured")
+        return {'success': False, 'error': 'ANTHROPIC_API_KEY not configured'}
+    elif settings.llm_provider == "openai" and not settings.openai_api_key:
+        logger.error("OPENAI_API_KEY not configured")
+        return {'success': False, 'error': 'OPENAI_API_KEY not configured'}
+    elif settings.llm_provider == "gemini" and not settings.google_api_key:
+        logger.error("GOOGLE_API_KEY not configured")
+        return {'success': False, 'error': 'GOOGLE_API_KEY not configured'}
 
     # Load goals
     goals = load_goals()

@@ -58,6 +58,15 @@ test_output*.txt
 client_secret*.json
 *Zone.Identifier
 
+# Additional security - sensitive configuration files
+*.key
+*.pem
+*.crt
+secrets/
+.env.local
+.env.production
+config/secrets.yaml
+
 # Unused/archived code
 unused/
 

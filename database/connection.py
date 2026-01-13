@@ -5,12 +5,8 @@ import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from psycopg2.pool import SimpleConnectionPool
-from typing import Optional, Dict, List, Any
+from typing import Optional, Dict, List, Any, Tuple
 from contextlib import contextmanager
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
 
 
 class Database:
@@ -25,6 +21,10 @@ class Database:
             database_url = os.getenv('DATABASE_URL')
             if not database_url:
                 raise ValueError("DATABASE_URL not found in environment variables")
+
+            # Set SSL mode if not specified (disable for local Docker, require for production)
+            if 'sslmode=' not in database_url:
+                database_url += '&sslmode=disable' if '?' in database_url else '?sslmode=disable'
 
             cls._pool = SimpleConnectionPool(
                 min_conn,
@@ -51,7 +51,7 @@ class Database:
             cls._pool.putconn(conn)
 
     @classmethod
-    def execute_query(cls, query: str, params: tuple = None) -> List[Dict[str, Any]]:
+    def execute_query(cls, query: str, params: Optional[Tuple] = None) -> List[Dict[str, Any]]:
         """Execute SELECT query and return results as list of dicts"""
         with cls.get_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cursor:
@@ -59,7 +59,7 @@ class Database:
                 return [dict(row) for row in cursor.fetchall()]
 
     @classmethod
-    def execute_one(cls, query: str, params: tuple = None) -> Optional[Dict[str, Any]]:
+    def execute_one(cls, query: str, params: Optional[Tuple] = None) -> Optional[Dict[str, Any]]:
         """Execute SELECT query and return first result"""
         with cls.get_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cursor:
@@ -68,7 +68,7 @@ class Database:
                 return dict(result) if result else None
 
     @classmethod
-    def execute_update(cls, query: str, params: tuple = None) -> int:
+    def execute_update(cls, query: str, params: Optional[Tuple] = None) -> int:
         """Execute INSERT/UPDATE/DELETE query and return affected rows"""
         with cls.get_connection() as conn:
             with conn.cursor() as cursor:
@@ -76,7 +76,7 @@ class Database:
                 return cursor.rowcount
 
     @classmethod
-    def execute_many(cls, query: str, params_list: List[tuple]) -> int:
+    def execute_many(cls, query: str, params_list: List[Tuple]) -> int:
         """Execute batch INSERT/UPDATE"""
         with cls.get_connection() as conn:
             with conn.cursor() as cursor:
@@ -94,32 +94,41 @@ class Database:
 
 # Convenience functions for common operations
 
-def insert_health_metric(data: Dict[str, Any]) -> int:
+def insert_health_metric(data: Dict[str, Any]) -> Optional[int]:
     """Insert health metric and return ID (skips if duplicate)"""
     query = """
     INSERT INTO health_metrics (
         timestamp, source, sleep_duration_hours, sleep_quality_score,
         resting_heart_rate, stress_level, recovery_score, steps, raw_data
     ) VALUES (
-        %(timestamp)s, %(source)s, %(sleep_duration_hours)s, %(sleep_quality_score)s,
-        %(resting_heart_rate)s, %(stress_level)s, %(recovery_score)s, %(steps)s, %(raw_data)s
+        %s, %s, %s, %s, %s, %s, %s, %s, %s
     )
     ON CONFLICT (timestamp, source) DO NOTHING
     RETURNING id
     """
-    result = Database.execute_one(query, data)
+    params = (
+        data.get('timestamp'),
+        data.get('source'),
+        data.get('sleep_duration_hours'),
+        data.get('sleep_quality_score'),
+        data.get('resting_heart_rate'),
+        data.get('stress_level'),
+        data.get('recovery_score'),
+        data.get('steps'),
+        data.get('raw_data')
+    )
+    result = Database.execute_one(query, params)
     return result['id'] if result else None
 
 
-def insert_calendar_event(data: Dict[str, Any]) -> int:
+def insert_calendar_event(data: Dict[str, Any]) -> Optional[int]:
     """Insert calendar event and return ID"""
     query = """
     INSERT INTO calendar_events (
         event_id, summary, description, start_time, end_time,
         has_external_participants, participant_count, tags
     ) VALUES (
-        %(event_id)s, %(summary)s, %(description)s, %(start_time)s, %(end_time)s,
-        %(has_external_participants)s, %(participant_count)s, %(tags)s
+        %s, %s, %s, %s, %s, %s, %s, %s
     )
     ON CONFLICT (event_id) DO UPDATE SET
         summary = EXCLUDED.summary,
@@ -129,11 +138,21 @@ def insert_calendar_event(data: Dict[str, Any]) -> int:
         last_modified = NOW()
     RETURNING id
     """
-    result = Database.execute_one(query, data)
+    params = (
+        data.get('event_id'),
+        data.get('summary'),
+        data.get('description'),
+        data.get('start_time'),
+        data.get('end_time'),
+        data.get('has_external_participants'),
+        data.get('participant_count'),
+        data.get('tags')
+    )
+    result = Database.execute_one(query, params)
     return result['id'] if result else None
 
 
-def log_agent_action(agent_name: str, action_type: str, data: Dict[str, Any]) -> int:
+def log_agent_action(agent_name: str, action_type: str, data: Dict[str, Any]) -> Optional[int]:
     """Log an agent action"""
     query = """
     INSERT INTO agent_actions (
@@ -162,7 +181,7 @@ def get_recent_health_metrics(days: int = 7) -> List[Dict[str, Any]]:
     """Get recent health metrics"""
     query = """
     SELECT * FROM health_metrics
-    WHERE timestamp >= NOW() - INTERVAL '%s days'
+    WHERE timestamp >= NOW() - INTERVAL %s days
     ORDER BY timestamp DESC
     """
     return Database.execute_query(query, (days,))
@@ -185,14 +204,15 @@ def set_user_preference(key: str, value: Any, description: str = None) -> None:
         description = COALESCE(EXCLUDED.description, user_preferences.description),
         updated_at = NOW()
     """
-    Database.execute_update(query, (key, value, description))
+    params = (key, value, description)
+    Database.execute_update(query, params)
 
 
 def get_upcoming_events(hours: int = 24) -> List[Dict[str, Any]]:
     """Get upcoming calendar events"""
     query = """
     SELECT * FROM calendar_events
-    WHERE start_time BETWEEN NOW() AND NOW() + INTERVAL '%s hours'
+    WHERE start_time BETWEEN NOW() AND NOW() + INTERVAL %s hours
     ORDER BY start_time ASC
     """
     return Database.execute_query(query, (hours,))
