@@ -3,7 +3,7 @@ import subprocess
 from datetime import datetime
 
 # Manual version - bump this for releases
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 
 def get_git_version():
     """Get version info from git (commit hash + dirty status)"""

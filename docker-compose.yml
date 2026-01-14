@@ -30,8 +30,9 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    network_mode: host
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-life_agent}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-life_optimization}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-life_agent}:${POSTGRES_PASSWORD}@localhost:5432/${POSTGRES_DB:-life_optimization}
     env_file:
       - .env
     volumes:
