@@ -720,8 +720,8 @@ def reconcile_workouts(days_back: int = 7, dry_run: bool = False, force: bool = 
             discrepancy = log_discrepancy(workout, activity)
             results['discrepancies'].append(discrepancy)
 
-        # Update calendar event
-        if update_calendar_event(calendar, workout['id'], planned, activity, dry_run):
+        # Update calendar event (skip option events - keep 🅰️/🅱️ intact)
+        if not workout.get('option') and update_calendar_event(calendar, workout['id'], planned, activity, dry_run):
             results['updated'] += 1
 
     # Summary
